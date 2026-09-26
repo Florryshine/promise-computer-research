@@ -1,0 +1,2 @@
+'use client'; import {createClient} from '@/lib/supabase/client'; import {useRouter} from 'next/navigation';
+export default function SignOutButton(){const router=useRouter();return <button onClick={async()=>{await createClient().auth.signOut();router.push('/');router.refresh();}} className="rounded-xl border border-slate-200 px-4 py-2 text-sm font-bold text-slate-700 hover:border-red-200 hover:text-red-600">Sign out</button>}

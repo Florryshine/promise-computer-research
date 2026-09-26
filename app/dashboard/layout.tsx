@@ -1,0 +1,2 @@
+import {createClient} from '@/lib/supabase/server'; import {redirect} from 'next/navigation'; import DashboardNav from '@/components/dashboard/DashboardNav';
+export default async function DashboardLayout({children}:{children:React.ReactNode}){const supabase=await createClient();const {data:{user}}=await supabase.auth.getUser();if(!user)redirect('/login');return <main className="min-h-[75vh] bg-slate-50 px-4 py-10"><div className="container"><DashboardNav/>{children}</div></main>}
