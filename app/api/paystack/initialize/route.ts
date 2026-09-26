@@ -50,7 +50,7 @@ export async function POST(request: Request) {
         amount: Math.round(amount * 100),
         reference,
         callback_url: `${origin}/payment/callback`,
-        metadata:{ order_id: order.id, customer_id: user.id, service: Array.isArray(order.services) ? order.services[0]?.title : order.services?.title }
+        metadata:{ order_id: order.id, customer_id: user.id, service: Array.isArray(order.services) ? order.services[0]?.title : undefined }
       })
     });
     const result = await init.json();
