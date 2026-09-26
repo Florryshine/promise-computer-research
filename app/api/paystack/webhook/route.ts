@@ -36,6 +36,7 @@ export async function POST(request: Request) {
 
     const paidAmount = Number(data.amount || 0) / 100;
     const currency = String(data.currency || 'NGN').toUpperCase();
+
     if (paidAmount !== Number(payment.amount) || currency !== 'NGN') {
       return new NextResponse('Amount or currency mismatch', { status: 400 });
     }
