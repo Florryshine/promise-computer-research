@@ -6,6 +6,10 @@ on:
   pull_request:
     branches: [main]
 
+env:
+  NEXT_PUBLIC_SUPABASE_URL: https://example.supabase.co
+  NEXT_PUBLIC_SUPABASE_ANON_KEY: ci-placeholder-anon-key
+
 jobs:
   build:
     runs-on: ubuntu-latest
