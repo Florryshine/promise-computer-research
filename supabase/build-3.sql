@@ -117,3 +117,29 @@ for insert with check (public.is_admin());
 drop trigger if exists payments_updated_at on public.payments;
 create trigger payments_updated_at before update on public.payments
 for each row execute procedure public.set_updated_at();
+
+
+-- Security hardening: customers must never be able to self-promote to admin.
+create or replace function public.prevent_profile_role_change()
+returns trigger
+language plpgsql
+security definer
+set search_path = public
+as $$
+begin
+  if auth.uid() = old.id and new.role is distinct from old.role then
+    raise exception 'Profile role cannot be changed by the account owner';
+  end if;
+  return new;
+end;
+$$;
+
+drop trigger if exists prevent_profile_role_change on public.profiles;
+create trigger prevent_profile_role_change
+before update on public.profiles
+for each row execute procedure public.prevent_profile_role_change();
+
+create unique index if not exists payments_one_pending_per_order_idx
+on public.payments(order_id)
+where status = 'pending';
+
