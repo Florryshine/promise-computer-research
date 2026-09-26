@@ -143,3 +143,29 @@ create unique index if not exists payments_one_pending_per_order_idx
 on public.payments(order_id)
 where status = 'pending';
 
+
+
+-- Security hardening: prevent a customer from changing their own role.
+create or replace function public.prevent_profile_role_change()
+returns trigger
+language plpgsql
+security definer
+set search_path = public
+as $$
+begin
+  if auth.uid() = old.id and new.role is distinct from old.role then
+    raise exception 'Profile role cannot be changed by the account owner';
+  end if;
+  return new;
+end;
+$$;
+
+drop trigger if exists prevent_profile_role_change on public.profiles;
+create trigger prevent_profile_role_change
+before update on public.profiles
+for each row execute procedure public.prevent_profile_role_change();
+
+-- Only one pending payment may exist for an order at a time.
+create unique index if not exists payments_one_pending_per_order_idx
+on public.payments(order_id)
+where status = 'pending';
