@@ -5,14 +5,20 @@ import { createAdminClient } from '@/lib/supabase/admin';
 export async function POST(request: Request) {
   try {
     const { reference } = await request.json();
-    if (!reference) return NextResponse.json({ paid: false, message: 'Missing payment reference.' }, { status: 400 });
+    if (!reference) {
+      return NextResponse.json({ paid: false, message: 'Missing payment reference.' }, { status: 400 });
+    }
 
     const secret = process.env.PAYSTACK_SECRET_KEY;
-    if (!secret) return NextResponse.json({ paid: false, message: 'Payment gateway is not configured.' }, { status: 500 });
+    if (!secret) {
+      return NextResponse.json({ paid: false, message: 'Payment gateway is not configured.' }, { status: 500 });
+    }
 
     const supabase = await createClient();
     const { data: { user } } = await supabase.auth.getUser();
-    if (!user) return NextResponse.json({ paid: false, message: 'Please log in.' }, { status: 401 });
+    if (!user) {
+      return NextResponse.json({ paid: false, message: 'Please log in.' }, { status: 401 });
+    }
 
     const { data: payment } = await supabase
       .from('payments')
@@ -44,6 +50,7 @@ export async function POST(request: Request) {
 
     if (paid) {
       const admin = createAdminClient();
+
       await admin.from('payments').update({
         status: 'paid',
         paid_at: result.data.paid_at || new Date().toISOString(),
@@ -64,6 +71,9 @@ export async function POST(request: Request) {
         : 'Payment was not successful or the amount did not match.'
     });
   } catch {
-    return NextResponse.json({ paid: false, message: 'Unexpected verification error.' }, { status: 500 });
+    return NextResponse.json({
+      paid: false,
+      message: 'Unexpected verification error.'
+    }, { status: 500 });
   }
 }
