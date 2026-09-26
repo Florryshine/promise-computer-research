@@ -51,15 +51,28 @@ export async function POST(request: Request) {
 
       if (verify.ok) {
         const result = await verify.json();
-        if (result?.data?.status === 'success' && Number(result?.data?.amount) / 100 === amount) {
+        if (
+          result?.data?.status === 'success' &&
+          Number(result?.data?.amount) / 100 === amount &&
+          String(result?.data?.currency || 'NGN').toUpperCase() === 'NGN'
+        ) {
           await admin.from('payments').update({
             status: 'paid',
             paid_at: result.data.paid_at || new Date().toISOString(),
             gateway_response: result.data.gateway_response || 'Successful',
             metadata: result.data
           }).eq('reference', existing.reference);
-          await admin.from('orders').update({ payment_status: 'paid', status: 'processing' }).eq('id', order.id);
-          return NextResponse.json({ authorization_url: null, reference: existing.reference, alreadyPaid: true });
+
+          await admin.from('orders').update({
+            payment_status: 'paid',
+            status: 'processing'
+          }).eq('id', order.id);
+
+          return NextResponse.json({
+            authorization_url: null,
+            reference: existing.reference,
+            alreadyPaid: true
+          });
         }
       }
 
@@ -120,11 +133,19 @@ export async function POST(request: Request) {
         gateway_response: result.message || 'Could not initialize payment.',
         metadata: result.data || {}
       }).eq('reference', reference);
-      return NextResponse.json({ error: result.message || 'Could not initialize payment.' }, { status: 502 });
+
+      return NextResponse.json({
+        error: result.message || 'Could not initialize payment.'
+      }, { status: 502 });
     }
 
-    await admin.from('payments').update({ metadata: result.data }).eq('reference', reference);
-    await admin.from('orders').update({ payment_status: 'pending' }).eq('id', order.id);
+    await admin.from('payments').update({
+      metadata: result.data
+    }).eq('reference', reference);
+
+    await admin.from('orders').update({
+      payment_status: 'pending'
+    }).eq('id', order.id);
 
     return NextResponse.json({
       authorization_url: result.data.authorization_url,
