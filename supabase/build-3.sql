@@ -1,6 +1,16 @@
 -- Promise Computer Research - Build 3 migration
 -- Run this AFTER the existing Build 2 schema in Supabase SQL Editor.
 
+
+drop policy if exists "users can create own orders" on public.orders;
+create policy "users can create own orders" on public.orders
+for insert with check (
+  auth.uid() = customer_id
+  and status = 'pending'
+  and payment_status = 'unpaid'
+  and amount = coalesce((select s.price from public.services s where s.id = service_id and s.active = true), 0)
+);
+
 create table if not exists public.payments (
   id uuid primary key default gen_random_uuid(),
   order_id uuid not null references public.orders(id) on delete cascade,
