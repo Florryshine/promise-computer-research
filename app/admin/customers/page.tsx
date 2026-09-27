@@ -1,0 +1,17 @@
+import {redirect} from "next/navigation";
+import Link from "next/link";
+import {createClient} from "@/lib/supabase/server";
+import {createAdminClient} from "@/lib/supabase/admin";
+
+export default async function AdminCustomers({searchParams}:{searchParams:Promise<{q?:string}>}){
+ const supabase=await createClient(); const {data:{user}}=await supabase.auth.getUser(); if(!user)redirect("/login?next=/admin/customers");
+ const {data:profile}=await supabase.from("profiles").select("role").eq("id",user.id).maybeSingle(); if(profile?.role!=="admin")redirect("/dashboard");
+ const admin=createAdminClient(); const params=await searchParams; const q=String(params.q||"").trim();
+ let query=admin.from("profiles").select("id,full_name,phone,role,created_at").order("created_at",{ascending:false});
+ if(q) query=query.or("full_name.ilike.%"+q+"%,phone.ilike.%"+q+"%");
+ const {data:customers}=await query; const ids=(customers||[]).map(c=>c.id);
+ const {data:orders}=ids.length?await admin.from("orders").select("customer_id,id,payment_status,amount").in("customer_id",ids):{data:[]};
+ const stats=new Map(); for(const o of orders||[]){const s=stats.get(o.customer_id)||{orders:0,paid:0,value:0};s.orders++;if(o.payment_status==="paid"){s.paid++;s.value+=Number(o.amount||0);}stats.set(o.customer_id,s);}
+ return <div><div className="flex flex-wrap items-end justify-between gap-4"><div><p className="text-sm font-bold text-[#0757d5]">CUSTOMER MANAGEMENT</p><h1 className="mt-1 text-2xl font-black">Customers</h1><p className="mt-1 text-sm text-slate-500">Search customers and inspect their orders and payment activity.</p></div><span className="rounded-xl bg-white px-4 py-2 text-sm font-bold shadow-sm">{customers?.length||0} shown</span></div>
+ <form className="mt-5 flex gap-2"><input name="q" defaultValue={q} placeholder="Search by name or phone…" className="min-w-0 flex-1 rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm"/><button className="rounded-xl bg-[#0757d5] px-5 py-3 text-sm font-bold text-white">Search</button>{q&&<Link href="/admin/customers" className="rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm font-bold">Clear</Link>}</form>
+ <section className="mt-5 overflow-hidden rounded-3xl bg-white shadow-sm"><div className="overflow-x-auto"><table className="w-full min-w-[760px] text-left text-sm"><thead><tr className="border-b text-slate-500"><th className="p-4">Customer</th><th className="p-4">Phone</th><th className="p-4">Orders</th><th className="p-4">Paid</th><th className="p-4">Paid value</th><th className="p-4"></th></tr></thead><tbody>{(customers||[]).map(c=>{const s=stats.get(c.id)||{orders:0,paid:0,value:0};return <tr key={c.id} className="border-b last:border-0"><td className="p-4"><p className="font-black">{c.full_name||"Unnamed customer"}</p><p className="text-xs text-slate-400">{c.role}</p></td><td className="p-4">{c.phone||"—"}</td><td className="p-4 font-bold">{s.orders}</td><td className="p-4">{s.paid}</td><td className="p-4 font-bold">₦{s.value.toLocaleString()}</td><td className="p-4 text-right"><Link href={"/admin/customers/"+c.id} className="rounded-xl border border-slate-200 px-3 py-2 text-xs font-bold text-[#0757d5]">View customer</Link></td></tr>})}</tbody></table></div>{!customers?.length&&<p className="p-10 text-center text-sm text-slate-500">No customers found.</p>}</section></div> }
