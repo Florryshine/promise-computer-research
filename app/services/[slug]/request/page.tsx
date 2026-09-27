@@ -1,12 +1,83 @@
 "use client";
-import {useEffect,useState} from "react"; import {useParams,useRouter} from "next/navigation"; import {createClient} from "@/lib/supabase/client";
+
+import {useEffect,useState} from "react";
+import {useParams,useRouter} from "next/navigation";
+import {createClient} from "@/lib/supabase/client";
+
+type ServiceField = {
+ field_key:string;
+ label:string;
+ field_type:string;
+ placeholder:string|null;
+ required:boolean;
+ options:any;
+ sort_order:number;
+};
+
 export default function RequestService(){
  const params=useParams<{slug:string}>(),router=useRouter();
- const [service,setService]=useState<any>(null),[fields,setFields]=useState<any[]>([]),[form,setForm]=useState<Record<string,string>>({}),[loading,setLoading]=useState(false),[pageLoading,setPageLoading]=useState(true),[error,setError]=useState("");
- useEffect(()=>{(async()=>{const supabase=createClient();const {data:{user}}=await supabase.auth.getUser();if(!user){router.replace(`/login?next=/services/${params.slug}/request`);return;}const [{data:s},{data:p}]=await Promise.all([supabase.from("services").select("id,slug,title,price,price_type,active").eq("slug",params.slug).eq("active",true).maybeSingle(),supabase.from("profiles").select("full_name,phone").eq("id",user.id).maybeSingle()]); const {data:f}=s?await supabase.from("service_fields").select("field_key,label,field_type,placeholder,required,options,sort_order").eq("service_id",s.id).order("sort_order"): {data:[]}; setService(s);setFields(f??[]);setForm({full_name:p?.full_name??"",phone:p?.phone??"",email:user.email??"",request_details:""});setPageLoading(false);})();},[params.slug,router]);
+ const [service,setService]=useState<any>(null),[fields,setFields]=useState<ServiceField[]>([]),[form,setForm]=useState<Record<string,string>>({}),[loading,setLoading]=useState(false),[pageLoading,setPageLoading]=useState(true),[error,setError]=useState("");
+
+ useEffect(()=>{(async()=>{
+  const supabase=createClient();
+  const {data:{user}}=await supabase.auth.getUser();
+  if(!user){router.replace("/login?next=/services/"+params.slug+"/request");return;}
+  const [{data:s},{data:p}]=await Promise.all([
+   supabase.from("services").select("id,slug,title,price,price_type,active").eq("slug",params.slug).eq("active",true).maybeSingle(),
+   supabase.from("profiles").select("full_name,phone").eq("id",user.id).maybeSingle()
+  ]);
+  const {data:f}=s
+   ? await supabase.from("service_fields").select("field_key,label,field_type,placeholder,required,options,sort_order").eq("service_id",s.id).order("sort_order")
+   : {data:[]};
+  setService(s);
+  setFields((f??[]) as ServiceField[]);
+  setForm({full_name:p?.full_name??"",phone:p?.phone??"",email:user.email??"",request_details:""});
+  setPageLoading(false);
+ })();},[params.slug,router]);
+
  const set=(k:string,v:string)=>setForm(x=>({...x,[k]:v}));
- async function submit(e:React.FormEvent){e.preventDefault();setLoading(true);setError("");const supabase=createClient();const {data:{user}}=await supabase.auth.getUser();if(!user){router.push("/login");return;}const {data:dbService}=await supabase.from("services").select("id,price,price_type,active").eq("slug",params.slug).eq("active",true).maybeSingle();if(!dbService){setError("This service is no longer available. Please return to the services page.");setLoading(false);return;}const reference="PCR-"+Date.now().toString().slice(-10);const {data:order,error:insertError}=await supabase.from("orders").insert({reference,customer_id:user.id,service_id:dbService.id,status:"pending",payment_status:"unpaid",amount:dbService.price??0,customer_note:form.request_details||null,form_data:form}).select("id").single();if(insertError){setError(insertError.message);setLoading(false);return;}router.push(dbService.price_type === "fixed" && Number(dbService.price ?? 0) > 0 ? `/dashboard/orders?new=${order.id}&pay=1` : `/dashboard/orders?new=${order.id}`);}
+
+ function renderField(f:ServiceField){
+  const value=form[f.field_key]??"";
+  const common={value,onChange:(e:React.ChangeEvent<HTMLInputElement|HTMLTextAreaElement|HTMLSelectElement>)=>set(f.field_key,e.target.value),placeholder:f.placeholder??undefined};
+  if(f.field_type==="textarea") return <textarea {...common} rows={5} className="mt-2 w-full rounded-xl border border-slate-200 px-4 py-3"/>;
+  if(f.field_type==="select") return <select {...common} className="mt-2 w-full rounded-xl border border-slate-200 bg-white px-4 py-3"><option value="">Select an option</option>{(Array.isArray(f.options)?f.options:[]).map((option:any,i:number)=><option key={i} value={String(option?.value??option)}>{String(option?.label??option)}</option>)}</select>;
+  return <input {...common} type={f.field_type==="number"?"number":f.field_type==="email"?"email":f.field_type==="tel"?"tel":"text"} className="mt-2 w-full rounded-xl border border-slate-200 px-4 py-3"/>;
+ }
+
+ async function submit(e:React.FormEvent){
+  e.preventDefault();setLoading(true);setError("");
+  const supabase=createClient();
+  const {data:{user}}=await supabase.auth.getUser();
+  if(!user){router.push("/login");return;}
+  const missing=fields.find(f=>f.required&&!String(form[f.field_key]??"").trim());
+  if(missing){setError("Please provide: "+missing.label+".");setLoading(false);return;}
+  const {data:dbService}=await supabase.from("services").select("id,price,price_type,active").eq("slug",params.slug).eq("active",true).maybeSingle();
+  if(!dbService){setError("This service is no longer available. Please return to the services page.");setLoading(false);return;}
+  const reference="PCR-"+Date.now().toString().slice(-10);
+  const {data:order,error:insertError}=await supabase.from("orders").insert({
+   reference,customer_id:user.id,service_id:dbService.id,status:"pending",payment_status:"unpaid",
+   amount:dbService.price??0,customer_note:form.request_details||null,form_data:form
+  }).select("id").single();
+  if(insertError){setError(insertError.message);setLoading(false);return;}
+  router.push(dbService.price_type==="fixed"&&Number(dbService.price??0)>0
+   ? "/dashboard/orders?new="+order.id+"&pay=1"
+   : "/dashboard/orders?new="+order.id);
+ }
+
  if(pageLoading)return <main className="section"><div className="container"><p className="text-slate-500">Loading service…</p></div></main>;
  if(!service)return <main className="section"><div className="container"><h1 className="text-2xl font-black">Service not found or unavailable</h1><p className="mt-2 text-slate-600">Please return to the services page and choose an active service.</p></div></main>;
- return <main className="section bg-slate-50"><div className="container"><div className="mx-auto max-w-2xl rounded-3xl bg-white p-6 shadow-soft sm:p-8"><p className="text-xs font-bold uppercase tracking-[.16em] text-[#0757d5]">Service request</p><h1 className="mt-2 text-3xl font-black">{service.title}</h1><p className="mt-2 text-sm text-slate-500">{service.price_type==="fixed"&&service.price!=null?`Price: ₦${Number(service.price).toLocaleString()}. Submit your details and pay securely after your order is created.`:"Submit your details and we will review the request and provide a quote where needed."}</p>{error&&<div className="mt-5 rounded-xl border border-red-200 bg-red-50 p-3 text-sm text-red-700">{error}</div>}<form onSubmit={submit} className="mt-7 space-y-5">{[["full_name","Full name","text"],["phone","Phone number","tel"],["email","Email","email"]].map(([k,l,t])=><label key={k} className="block text-sm font-bold">{l}<input required value={form[k]??""} onChange={e=>set(k,e.target.value)} type={t} className="mt-2 w-full rounded-xl border border-slate-200 px-4 py-3"/></label>)}{fields.map(f=><label key={f.field_key} className="block text-sm font-bold">{f.label}{f.field_type==="textarea"?<textarea required={f.required} value={form[f.field_key]??""} onChange={e=>set(f.field_key,e.target.value)} rows={5} placeholder={f.placeholder??""} className="mt-2 w-full rounded-xl border border-slate-200 px-4 py-3"/>:f.field_type==="select"?<select required={f.required} value={form[f.field_key]??""} onChange={e=>set(f.field_key,e.target.value)} className="mt-2 w-full rounded-xl border border-slate-200 px-4 py-3"><option value="">Select an option</option>{(Array.isArray(f.options)?f.options:[]).map((option:any)=><option key={String(option.value??option)} value={String(option.value??option)}>{String(option.label??option)}</option>)}</select>:<input required={f.required} value={form[f.field_key]??""} onChange={e=>set(f.field_key,e.target.value)} type={f.field_type==="number"?"number":"text"} placeholder={f.placeholder??""} className="mt-2 w-full rounded-xl border border-slate-200 px-4 py-3"/>}</label>)}<label className="block text-sm font-bold">Request details<textarea required={!fields.length} value={form.request_details??""} onChange={e=>set("request_details",e.target.value)} rows={7} className="mt-2 w-full rounded-xl border border-slate-200 px-4 py-3" placeholder="Tell us what you need and include any relevant information."/></label><button disabled={loading} className="w-full rounded-xl bg-[#0757d5] px-5 py-3.5 font-bold text-white disabled:opacity-60">{loading?"Submitting…":"Submit service request"}</button></form></div></div></main>;
+
+ return <main className="section bg-slate-50"><div className="container"><div className="mx-auto max-w-2xl rounded-3xl bg-white p-6 shadow-soft sm:p-8">
+  <p className="text-xs font-bold uppercase tracking-[.16em] text-[#0757d5]">Service request</p>
+  <h1 className="mt-2 text-3xl font-black">{service.title}</h1>
+  <p className="mt-2 text-sm text-slate-500">{service.price_type==="fixed"&&service.price!=null?"Price: ₦"+Number(service.price).toLocaleString()+". Submit your details and pay securely after your order is created.":"Submit your details and we will review the request and provide a quote where needed."}</p>
+  {error&&<div className="mt-5 rounded-xl border border-red-200 bg-red-50 p-3 text-sm text-red-700">{error}</div>}
+  <form onSubmit={submit} className="mt-7 space-y-5">
+   {[["full_name","Full name","text"],["phone","Phone number","tel"],["email","Email","email"]].map(([k,l,t])=><label key={k} className="block text-sm font-bold">{l}<input required value={form[k]??""} onChange={e=>set(k,e.target.value)} type={t} className="mt-2 w-full rounded-xl border border-slate-200 px-4 py-3"/></label>)}
+   {fields.map(f=><label key={f.field_key} className="block text-sm font-bold">{f.label}{f.required&&<span className="text-red-500"> *</span>}{renderField(f)}</label>)}
+   <label className="block text-sm font-bold">Request details{!fields.length&&<span className="text-red-500"> *</span>}<textarea required={!fields.length} value={form.request_details??""} onChange={e=>set("request_details",e.target.value)} rows={7} className="mt-2 w-full rounded-xl border border-slate-200 px-4 py-3" placeholder="Tell us what you need and include any relevant information."/></label>
+   <button disabled={loading} className="w-full rounded-xl bg-[#0757d5] px-5 py-3.5 font-bold text-white disabled:opacity-60">{loading?"Submitting…":"Submit service request"}</button>
+  </form>
+ </div></div></main>;
 }
