@@ -62,6 +62,11 @@ export async function POST(request: Request) {
         payment_status: 'paid',
         status: 'processing'
       }).eq('id', payment.order_id);
+      await admin.from('notifications').insert({
+        user_id: user.id,
+        title: 'Payment confirmed',
+        message: 'Payment for your order has been confirmed. Your order is now being processed.'
+      });
     }
 
     return NextResponse.json({
