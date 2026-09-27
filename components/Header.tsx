@@ -23,9 +23,9 @@ export default function Header(){
         <Link className="text-sm font-semibold text-slate-700 hover:text-[#0757d5]" href="/contact">Contact</Link>
         <Link className="text-sm font-semibold text-slate-700 hover:text-[#0757d5]" href="/dashboard">My Account</Link>
       </nav>
-      <div className="hidden md:block"><a href="https://wa.me/2348140733003" target="_blank" rel="noreferrer" className="inline-flex items-center gap-2 rounded-xl bg-[#0757d5] px-4 py-2.5 text-sm font-bold text-white hover:bg-[#063b93]"><MessageCircle size={17}/> WhatsApp</a></div>
+      <div className="hidden md:block"><a href="https://wa.me/2347058391188" target="_blank" rel="noreferrer" className="inline-flex items-center gap-2 rounded-xl bg-[#0757d5] px-4 py-2.5 text-sm font-bold text-white hover:bg-[#063b93]"><MessageCircle size={17}/> WhatsApp</a></div>
       <button aria-label="Open menu" className="rounded-lg p-2 md:hidden" onClick={()=>setOpen(!open)}>{open?<X/>:<Menu/>}</button>
     </div>
-    {open&&<div className="border-t border-slate-100 bg-white px-4 pb-5 pt-3 md:hidden"><div className="container flex flex-col gap-1">{[['Home','/'],['Services','/services'],['About','/about'],['FAQ','/faq'],['Contact','/contact'],['My Account','/dashboard']].map(([label,href])=><Link key={href} onClick={()=>setOpen(false)} className="rounded-lg px-3 py-3 font-semibold hover:bg-slate-50" href={href}>{label}</Link>)}<a onClick={()=>setOpen(false)} href="https://wa.me/2348140733003" target="_blank" rel="noreferrer" className="mt-2 inline-flex justify-center rounded-xl bg-[#0757d5] px-4 py-3 font-bold text-white">Chat on WhatsApp</a></div></div>}
+    {open&&<div className="border-t border-slate-100 bg-white px-4 pb-5 pt-3 md:hidden"><div className="container flex flex-col gap-1">{[['Home','/'],['Services','/services'],['About','/about'],['FAQ','/faq'],['Contact','/contact'],['My Account','/dashboard']].map(([label,href])=><Link key={href} onClick={()=>setOpen(false)} className="rounded-lg px-3 py-3 font-semibold hover:bg-slate-50" href={href}>{label}</Link>)}<a onClick={()=>setOpen(false)} href="https://wa.me/2347058391188" target="_blank" rel="noreferrer" className="mt-2 inline-flex justify-center rounded-xl bg-[#0757d5] px-4 py-3 font-bold text-white">Chat on WhatsApp</a></div></div>}
   </header>;
 }
