@@ -52,6 +52,14 @@ export async function POST(request: Request) {
       payment_status: 'paid',
       status: 'processing'
     }).eq('id', payment.order_id);
+    const {data:orderOwner}=await supabase.from('orders').select('customer_id,reference').eq('id',payment.order_id).maybeSingle();
+    if(orderOwner?.customer_id){
+      await supabase.from('notifications').insert({
+        user_id: orderOwner.customer_id,
+        title: 'Payment confirmed',
+        message: 'Payment for order '+orderOwner.reference+' has been confirmed. Your order is now being processed.'
+      });
+    }
 
     return NextResponse.json({ received: true });
   } catch {
