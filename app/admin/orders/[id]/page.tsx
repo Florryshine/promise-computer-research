@@ -2,7 +2,7 @@ import {notFound,redirect} from 'next/navigation';
 import Link from 'next/link';
 import {createClient} from '@/lib/supabase/server';
 import {createAdminClient} from '@/lib/supabase/admin';
-import AdminOrderActions from '../OrderActions';
+import AdminOrderActions from '../../OrderActions';
 import AdminDocumentActions from './AdminDocumentActions';
 
 export default async function AdminOrderDetail({params}:{params:Promise<{id:string}>}){
