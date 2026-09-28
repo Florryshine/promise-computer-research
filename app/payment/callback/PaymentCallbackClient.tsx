@@ -2,11 +2,8 @@
 
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
-import { useSearchParams } from 'next/navigation';
 
-export default function PaymentCallbackClient() {
-  const params = useSearchParams();
-  const reference = params.get('reference');
+export default function PaymentCallbackClient({ reference }: { reference: string }) {
   const [state, setState] = useState('Checking your payment…');
 
   useEffect(() => {
