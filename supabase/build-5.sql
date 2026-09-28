@@ -4,7 +4,7 @@
 insert into public.services
 (slug,title,category,description,price_type,price,active,sort_order)
 values
-('post-utme-screening','Post-UTME & Online Screening Applications','Admissions','Post-UTME and online screening application assistance. Price depends on the institution; contact us on WhatsApp for the current fee.','request',null,true,1),
+('post-utme-screening','Post-UTME & Online Screening Applications','Admissions','Post-UTME and online screening application assistance. Set the institution-specific price in Admin → Services & Pricing when you are ready to accept online payment.','request',null,true,1),
 ('school-fees-acceptance-gst-ent','School Fees, Acceptance Fees & GST/ENT','School Services','Assistance with school fees, acceptance fees and GST/ENT payments.','request',null,true,2),
 ('course-registration-clearance','Course Registration & Online Clearance','School Services','Course registration and online clearance assistance.','request',null,true,3),
 ('jamb-original-result-portal','JAMB Original Result — Portal Access','JAMB','Original JAMB result processing for candidates who can log in to their JAMB portal.','fixed',2500,true,4),
