@@ -1,3 +1,29 @@
+-- Build 6.12 repair: payment table + policies.
+create table if not exists public.payments (
+  id uuid primary key default gen_random_uuid(),
+  order_id uuid not null references public.orders(id) on delete cascade,
+  reference text unique not null,
+  provider text not null default 'paystack',
+  amount numeric(12,2) not null,
+  currency text not null default 'NGN',
+  status public.payment_status not null default 'pending',
+  gateway_response text,
+  paid_at timestamptz,
+  metadata jsonb not null default '{}'::jsonb,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
+);
+alter table public.payments enable row level security;
+create index if not exists payments_order_id_idx on public.payments(order_id);
+create index if not exists payments_reference_idx on public.payments(reference);
+drop policy if exists "users can view own payments" on public.payments;
+create policy "users can view own payments" on public.payments for select using (exists (select 1 from public.orders o where o.id=order_id and o.customer_id=auth.uid()));
+drop policy if exists "admins can view all payments" on public.payments;
+create policy "admins can view all payments" on public.payments for select using (public.is_admin());
+drop policy if exists "admins can update payments" on public.payments;
+create policy "admins can update payments" on public.payments for update using (public.is_admin()) with check (public.is_admin());
+create unique index if not exists payments_one_pending_per_order_idx on public.payments(order_id) where status='pending';
+
 -- Build 6.12 repair: JAMB/WAEC year options + Post-UTME service
 -- Run once in Supabase SQL Editor.
 
