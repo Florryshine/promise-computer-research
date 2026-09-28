@@ -3,6 +3,8 @@ import {ArrowRight} from "lucide-react";
 import {createClient} from "@/lib/supabase/server";
 import {getServicePresentation} from "@/lib/service-presentation";
 
+export const dynamic = 'force-dynamic';
+
 export default async function Services(){
  const supabase=await createClient();
  const {data:services}=await supabase.from("services").select("slug,title,category,description,price,price_type").eq("active",true).order("sort_order");
