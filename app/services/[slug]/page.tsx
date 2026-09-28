@@ -4,6 +4,8 @@ import {ArrowLeft,ArrowRight,CheckCircle2,MessageCircle} from 'lucide-react';
 import {createClient} from '@/lib/supabase/server';
 import {getServicePresentation} from '@/lib/service-presentation';
 
+export const dynamic = 'force-dynamic';
+
 export default async function ServicePage({params}:{params:Promise<{slug:string}>}){
   const {slug}=await params;
   const supabase=await createClient();
