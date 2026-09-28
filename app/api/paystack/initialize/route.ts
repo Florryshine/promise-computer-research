@@ -106,7 +106,7 @@ export async function POST(request: Request) {
         }, { status: 409 });
       }
 
-      return NextResponse.json({ error: 'Could not prepare the payment.' }, { status: 500 });
+      return NextResponse.json({ error: paymentInsertError.message || 'Could not prepare the payment.' }, { status: 500 });
     }
 
     const origin = new URL(request.url).origin;
