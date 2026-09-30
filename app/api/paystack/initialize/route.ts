@@ -34,8 +34,11 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: 'This order is already paid.' }, { status: 409 });
     }
 
-    const secret = process.env.PAYSTACK_SECRET_KEY;
+    const secret = process.env.PAYSTACK_SECRET_KEY?.trim();
     if (!secret) return NextResponse.json({ error: 'Payment gateway is not configured.' }, { status: 500 });
+    if (!/^sk_(test|live)_/.test(secret)) {
+      return NextResponse.json({ error: 'Paystack secret key is invalid. PAYSTACK_SECRET_KEY must be a Paystack secret key starting with sk_test_ or sk_live_.' }, { status: 500 });
+    }
 
     const admin = createAdminClient();
     const { data: existing } = await admin
@@ -127,17 +130,23 @@ export async function POST(request: Request) {
       })
     });
 
-    const result = await init.json();
+    const responseText = await init.text();
+    let result: any = null;
+    try { result = JSON.parse(responseText); } catch { result = { message: responseText }; }
 
-    if (!init.ok || !result.status || !result.data?.authorization_url) {
+    if (!init.ok || !result?.status || !result?.data?.authorization_url) {
       await admin.from('payments').update({
         status: 'failed',
         gateway_response: result.message || 'Could not initialize payment.',
         metadata: result.data || {}
       }).eq('reference', reference);
 
+      const message = init.status === 401
+        ? 'Paystack rejected the secret key. Check the PAYSTACK_SECRET_KEY in the deployed environment and make sure it is the correct Test/Live secret key.'
+        : result?.message || 'Could not initialize payment.';
       return NextResponse.json({
-        error: result.message || 'Could not initialize payment.'
+        error: message,
+        paystack_status: init.status
       }, { status: 502 });
     }
 
