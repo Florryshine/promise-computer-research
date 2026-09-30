@@ -1,13 +1,14 @@
 const BASE_URL = (process.env.VTPASS_BASE_URL || 'https://sandbox.vtpass.com/api').replace(/\/$/, '');
 
-function headers(method: 'GET' | 'POST') {
-  const apiKey = process.env.VTPASS_API_KEY;
-  const publicKey = process.env.VTPASS_PUBLIC_KEY;
-  const secretKey = process.env.VTPASS_SECRET_KEY;
+function headers(method: 'GET' | 'POST'): Record<string, string> {
+  const apiKey = process.env.VTPASS_API_KEY?.trim();
+  const publicKey = process.env.VTPASS_PUBLIC_KEY?.trim();
+  const secretKey = process.env.VTPASS_SECRET_KEY?.trim();
   if (!apiKey || !publicKey || !secretKey) throw new Error('VTpass server credentials are not configured.');
-  return method === 'GET'
-    ? { 'api-key': apiKey, 'public-key': publicKey, Accept: 'application/json' }
-    : { 'api-key': apiKey, 'secret-key': secretKey, 'Content-Type': 'application/json', Accept: 'application/json' };
+  if (method === 'GET') {
+    return { 'api-key': apiKey, 'public-key': publicKey, Accept: 'application/json' };
+  }
+  return { 'api-key': apiKey, 'secret-key': secretKey, 'Content-Type': 'application/json', Accept: 'application/json' };
 }
 
 async function request(path: string, method: 'GET' | 'POST', body?: Record<string, unknown>) {
