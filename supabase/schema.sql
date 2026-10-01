@@ -175,3 +175,29 @@ on conflict (slug) do nothing;
 -- Storage bucket for customer documents. Keep it private.
 insert into storage.buckets (id,name,public) values ('order-documents','order-documents',false)
 on conflict (id) do nothing;
+
+-- Build 3: automated VTpass fulfillment tracking
+create table if not exists public.provider_transactions (
+  id uuid primary key default gen_random_uuid(),
+  order_id uuid not null references public.orders(id) on delete cascade,
+  provider text not null default 'vtpass',
+  request_id text unique not null,
+  service_id text not null,
+  provider_reference text,
+  provider_status text not null default 'pending',
+  status text not null default 'pending' check (status in ('pending','successful','failed')),
+  amount numeric(12,2),
+  response jsonb not null default '{}'::jsonb,
+  request_data jsonb not null default '{}'::jsonb,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now(),
+  unique(order_id, provider)
+);
+create index if not exists provider_transactions_order_id_idx on public.provider_transactions(order_id);
+create index if not exists provider_transactions_provider_reference_idx on public.provider_transactions(provider_reference);
+alter table public.provider_transactions enable row level security;
+drop policy if exists "users can view own provider transactions" on public.provider_transactions;
+create policy "users can view own provider transactions" on public.provider_transactions for select
+using (exists (select 1 from public.orders o where o.id=order_id and o.customer_id=auth.uid()));
+drop trigger if exists provider_transactions_updated_at on public.provider_transactions;
+create trigger provider_transactions_updated_at before update on public.provider_transactions for each row execute procedure public.set_updated_at();
