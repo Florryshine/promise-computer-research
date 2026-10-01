@@ -1,6 +1,7 @@
 import crypto from 'crypto';
 import { NextResponse } from 'next/server';
 import { createAdminClient } from '@/lib/supabase/admin';
+import { fulfillOrder } from '@/lib/vtpass';
 
 export async function POST(request: Request) {
   try {
@@ -52,6 +53,10 @@ export async function POST(request: Request) {
       payment_status: 'paid',
       status: 'processing'
     }).eq('id', payment.order_id);
+
+    // Fulfill supported VTpass orders automatically after confirmed payment.
+    // Failure here does not roll back the verified payment; the provider transaction is recorded for review.
+    try { await fulfillOrder(payment.order_id); } catch (error) { console.error('VTpass fulfillment failed:', error); }
     const {data:orderOwner}=await supabase.from('orders').select('customer_id,reference').eq('id',payment.order_id).maybeSingle();
     if(orderOwner?.customer_id){
       await supabase.from('notifications').insert({
