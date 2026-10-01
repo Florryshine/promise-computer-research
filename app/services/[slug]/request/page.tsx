@@ -88,6 +88,12 @@ export default function RequestService(){
    if(missing)throw new Error("Please provide: "+missing.label+".");
    let orderAmount=0;let orderForm={...form};
    if(isVTU){
+    let customerVerification=verified;
+    if(kind==="electricity"||kind==="dstv"){
+      if(!customerVerification) customerVerification=await verifyCustomer();
+      if(!customerVerification) throw new Error("Please verify the customer details before payment.");
+    }
+    const calculatedProviderAmount=isDStvRenew?Number(customerVerification?.Renewal_Amount||0):providerAmount;
     if(kind==="data"||kind==="dstv"){
       if(kind==="data"){
         if(!form.variation_code)throw new Error("Select a data plan.");
@@ -97,19 +103,14 @@ export default function RequestService(){
         if(!form.variation_code)throw new Error("Select a DStv bouquet.");
         if(!selectedVariation)throw new Error("That DStv bouquet is no longer available. Please select another.");
       }
-      if(kind==="dstv"&&isDStvRenew&&!customerVerification?.Renewal_Amount)throw new Error("VTpass did not return a renewal amount for this smartcard.");
-      orderForm={...orderForm,provider_amount:String(providerAmount),service_fee:String(serviceFee)};
+      if(kind==="dstv"&&isDStvRenew&&!calculatedProviderAmount)throw new Error("VTpass did not return a renewal amount for this smartcard.");
+      orderForm={...orderForm,provider_amount:String(calculatedProviderAmount),service_fee:String(serviceFee)};
     }
     if(kind==="airtime"||kind==="electricity"){
       if(!Number.isFinite(providerAmount)||providerAmount<=0)throw new Error("Enter a valid amount.");
-      orderForm={...orderForm,provider_amount:String(providerAmount),service_fee:String(serviceFee)};
+      orderForm={...orderForm,provider_amount:String(calculatedProviderAmount),service_fee:String(serviceFee)};
     }
-    let customerVerification=verified;
-    if(kind==="electricity"||kind==="dstv"){
-      if(!customerVerification) customerVerification=await verifyCustomer();
-      if(!customerVerification) throw new Error("Please verify the customer details before payment.");
-    }
-    orderAmount=total;
+    orderAmount=calculatedProviderAmount+serviceFee;
     if(kind==="dstv")orderForm.subscription_type=form.subscription_type||"change";
    }else{
     const {data:dbService}=await supabase.from("services").select("id,price,price_type,active").eq("slug",params.slug).eq("active",true).maybeSingle();
