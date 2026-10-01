@@ -2,11 +2,12 @@
 import { useState } from 'react';
 import { createClient } from '@/lib/supabase/client';
 import Link from 'next/link';
-import { useRouter } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation';
 
 export default function AuthForm({ mode }: { mode: 'login' | 'register' }) {
   const supabase = createClient();
   const router = useRouter();
+  const searchParams = useSearchParams();
   const [fullName,setFullName]=useState(''); const [phone,setPhone]=useState('');
   const [email,setEmail]=useState(''); const [password,setPassword]=useState('');
   const [loading,setLoading]=useState(false); const [error,setError]=useState(''); const [message,setMessage]=useState('');
@@ -18,7 +19,12 @@ export default function AuthForm({ mode }: { mode: 'login' | 'register' }) {
       if(error) setError(error.message); else { setMessage('Account created. If email confirmation is enabled, check your inbox before logging in.'); router.push('/login'); }
     } else {
       const {error}=await supabase.auth.signInWithPassword({email,password});
-      if(error) setError(error.message); else router.push('/dashboard');
+      if(error) setError(error.message);
+      else {
+        const next=searchParams.get('next');
+        const safeNext=next && next.startsWith('/') && !next.startsWith('//') ? next : '/dashboard';
+        router.push(safeNext);
+      }
     }
     setLoading(false);
   }
