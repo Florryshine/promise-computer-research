@@ -6,10 +6,11 @@ function first(obj:any,...keys:string[]){for(const k of keys){const v=obj?.[k];i
 async function handle(request:Request){
   try{
     const body=await request.json().catch(()=>({}));
-    const requestId=String(first(body,'request_id','requestId')||body?.content?.transactions?.request_id||'');
-    const providerReference=String(first(body,'transactionId','transaction_id')||body?.content?.transactions?.transactionId||'');
-    const statusText=String(first(body,'status','response_description','message')||body?.content?.transactions?.status||'').toLowerCase();
-    if(!requestId&&!providerReference)return NextResponse.json({received:true});
+    const data=body?.data||body?.content?.transactions||body?.content||body;
+    const requestId=String(first(data,'request_id','requestId')||'');
+    const providerReference=String(first(data,'transactionId','transaction_id','transactionId')||'');
+    const statusText=String(first(data,'status','response_description','message')||'').toLowerCase();
+    if(!requestId&&!providerReference)return NextResponse.json({response:'success'});
     const admin=createAdminClient();
     let q=admin.from('provider_transactions').select('id,order_id');
     const {data:tx}=requestId?await q.eq('request_id',requestId).maybeSingle():await q.eq('provider_reference',providerReference).maybeSingle();
