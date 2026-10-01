@@ -10,7 +10,7 @@ export async function middleware(request: NextRequest) {
       cookies: {
         getAll: () => request.cookies.getAll(),
         setAll: (cookiesToSet) => {
-          cookiesToSet.forEach(({ name, value, options }) => request.cookies.set(name, value));
+          cookiesToSet.forEach(({ name, value }) => request.cookies.set(name, value));
           response = NextResponse.next({ request });
           cookiesToSet.forEach(({ name, value, options }) => response.cookies.set(name, value, options));
         },
@@ -19,16 +19,23 @@ export async function middleware(request: NextRequest) {
   );
 
   const { data: { user } } = await supabase.auth.getUser();
-  if (request.nextUrl.pathname.startsWith('/dashboard') && !user) {
+  const pathname = request.nextUrl.pathname;
+
+  if ((pathname.startsWith('/dashboard') || pathname.startsWith('/admin')) && !user) {
     const url = request.nextUrl.clone();
     url.pathname = '/login';
-    url.searchParams.set('next', request.nextUrl.pathname);
+    url.search = '';
+    url.searchParams.set('next', pathname);
     return NextResponse.redirect(url);
   }
-  if ((request.nextUrl.pathname === '/login' || request.nextUrl.pathname === '/register') && user) {
-    return NextResponse.redirect(new URL('/dashboard', request.url));
+
+  if ((pathname === '/login' || pathname === '/register') && user) {
+    const next = request.nextUrl.searchParams.get('next');
+    const safeNext = next && next.startsWith('/') && !next.startsWith('//') ? next : '/dashboard';
+    return NextResponse.redirect(new URL(safeNext, request.url));
   }
+
   return response;
 }
 
-export const config = { matcher: ['/dashboard/:path*', '/login', '/register'] };
+export const config = { matcher: ['/dashboard/:path*', '/admin/:path*', '/login', '/register'] };
