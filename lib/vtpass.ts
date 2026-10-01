@@ -72,7 +72,8 @@ export async function fulfillOrder(orderId:string){
   if(!p.billersCode && ['data','dstv','electricity'].includes(p.kind)) throw new Error('Recipient/meter/smartcard number is missing.');
   if(!p.phone && ['airtime','data','dstv','electricity'].includes(p.kind)) throw new Error('Phone number is missing.');
   if(!Number.isFinite(p.amount)||p.amount<=0) throw new Error('Provider purchase amount is missing.');
-  if(['data','dstv'].includes(p.kind)&&!p.variation_code) throw new Error('Product variation is missing.');
+  if(p.kind==='data'&&!p.variation_code) throw new Error('Data variation is missing.');
+  if(p.kind==='dstv'&&p.subscription_type==='change'&&!p.variation_code) throw new Error('DStv bouquet variation is missing.');
   if(!vtpassConfigured()) throw new Error('VTpass environment variables are missing.');
 
   if(p.kind==='dstv'){
