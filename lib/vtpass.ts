@@ -25,7 +25,7 @@ function makeRequestId(order:any){return 'PCR-VT-'+String(order.reference).repla
 
 export async function fulfillOrder(orderId:string){
   const admin=createAdminClient();
-  const {data:order,error}=await admin.from('orders').select('id,reference,status,payment_status,amount,form_data,services(slug,title)').eq('id',orderId).maybeSingle();
+  const {data:order,error}=await admin.from('orders').select('id,reference,status,payment_status,amount,form_data,customer_id,services(slug,title)').eq('id',orderId).maybeSingle();
   if(error) throw error;
   if(!order) throw new Error('Order not found');
   if(order.payment_status!=='paid') return {status:'skipped',message:'Order is not paid.'};
