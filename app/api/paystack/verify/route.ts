@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
 import { createAdminClient } from '@/lib/supabase/admin';
+import { fulfillOrder } from '@/lib/vtpass';
 
 export async function POST(request: Request) {
   try {
@@ -62,6 +63,7 @@ export async function POST(request: Request) {
         payment_status: 'paid',
         status: 'processing'
       }).eq('id', payment.order_id);
+      try { await fulfillOrder(payment.order_id); } catch (error) { console.error('VTpass fulfillment failed:', error); }
       await admin.from('notifications').insert({
         user_id: user.id,
         title: 'Payment confirmed',
