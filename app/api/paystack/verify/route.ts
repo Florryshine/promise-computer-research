@@ -3,6 +3,54 @@ import { createClient } from '@/lib/supabase/server';
 import { createAdminClient } from '@/lib/supabase/admin';
 import { fulfillOrder } from '@/lib/vtpass';
 
+function diagnose(result: any, expectedAmount: number, expectedCurrency: string) {
+  const gatewayStatus = String(result?.data?.status || '').toLowerCase();
+  const returnedAmount = result?.data?.amount == null ? null : Number(result.data.amount) / 100;
+  const returnedCurrency = String(result?.data?.currency || '').toUpperCase();
+  const expected = expectedCurrency.toUpperCase();
+
+  if (gatewayStatus !== 'success') {
+    return {
+      code: gatewayStatus === 'pending' || gatewayStatus === 'ongoing' ? 'payment_pending' : 'payment_not_successful',
+      cause: gatewayStatus
+        ? `Paystack returned transaction status: ${gatewayStatus}.`
+        : 'Paystack did not return a successful transaction status.',
+      gatewayStatus,
+      returnedAmount,
+      returnedCurrency,
+      gatewayResponse: result?.data?.gateway_response || null
+    };
+  }
+  if (returnedAmount !== expectedAmount) {
+    return {
+      code: 'amount_mismatch',
+      cause: `Paystack returned ₦${returnedAmount ?? 'unknown'}, but PCR expected ₦${expectedAmount}.`,
+      gatewayStatus,
+      returnedAmount,
+      returnedCurrency,
+      gatewayResponse: result?.data?.gateway_response || null
+    };
+  }
+  if (returnedCurrency !== expected) {
+    return {
+      code: 'currency_mismatch',
+      cause: `Paystack returned ${returnedCurrency || 'unknown'}, but PCR expected ${expected}.`,
+      gatewayStatus,
+      returnedAmount,
+      returnedCurrency,
+      gatewayResponse: result?.data?.gateway_response || null
+    };
+  }
+  return {
+    code: 'verified',
+    cause: 'Paystack confirmed a successful transaction with the expected amount and currency.',
+    gatewayStatus,
+    returnedAmount,
+    returnedCurrency,
+    gatewayResponse: result?.data?.gateway_response || null
+  };
+}
+
 export async function POST(request: Request) {
   try {
     const body = await request.json();
@@ -16,29 +64,38 @@ export async function POST(request: Request) {
       return NextResponse.json({ paid: false, message: 'Payment gateway is not configured.' }, { status: 500 });
     }
 
-    const supabase = await createClient();
-    const { data: { user } } = await supabase.auth.getUser();
-    if (!user) {
-      return NextResponse.json({ paid: false, message: 'Please log in to view this payment.' }, { status: 401 });
-    }
-
-    const { data: payment, error: paymentError } = await supabase
+    // Use the service-role client for the payment lookup. The callback can be
+    // reached immediately after Paystack redirects and should not depend on a
+    // browser RLS policy/session being available at that exact moment.
+    const admin = createAdminClient();
+    const { data: payment, error: paymentError } = await admin
       .from('payments')
-      .select('id,order_id,amount,reference,status,orders!inner(customer_id)')
+      .select('id,order_id,amount,currency,reference,status,metadata')
       .eq('reference', reference)
       .maybeSingle();
 
-    if (paymentError || !payment || (payment as any).orders?.customer_id !== user.id) {
-      return NextResponse.json({ paid: false, message: 'Payment not found.' }, { status: 404 });
+    if (paymentError || !payment) {
+      return NextResponse.json({ paid: false, code: 'payment_not_found', message: 'Payment not found.' }, { status: 404 });
     }
 
-    // Webhook and callback verification can legitimately arrive at the same time.
-    // Once our database has recorded this payment as paid, do not fulfill it again.
+    // If an authenticated browser calls this endpoint, make sure it owns the order.
+    // Anonymous callback verification is allowed because the reference is the
+    // Paystack transaction identifier returned by the gateway.
+    try {
+      const supabase = await createClient();
+      const { data: { user } } = await supabase.auth.getUser();
+      if (user) {
+        const { data: orderOwner } = await admin.from('orders').select('customer_id').eq('id', payment.order_id).maybeSingle();
+        if (orderOwner?.customer_id && orderOwner.customer_id !== user.id) {
+          return NextResponse.json({ paid: false, message: 'Payment not found.' }, { status: 404 });
+        }
+      }
+    } catch {
+      // Callback verification does not require a browser session.
+    }
+
     if (payment.status === 'paid') {
-      return NextResponse.json({
-        paid: true,
-        message: 'Payment verified successfully.'
-      });
+      return NextResponse.json({ paid: true, code: 'already_paid', message: 'Payment verified successfully.' });
     }
 
     const response = await fetch(
@@ -48,56 +105,51 @@ export async function POST(request: Request) {
         cache: 'no-store'
       }
     );
-    const result = await response.json();
 
-    if (!response.ok || !result.status) {
-      return NextResponse.json({
-        paid: false,
-        message: result.message || 'Verification failed.'
-      }, { status: 502 });
+    let result: any;
+    try { result = await response.json(); } catch { result = { status: false, message: 'Paystack returned an invalid response.' }; }
+
+    if (!response.ok || !result?.status) {
+      const diagnosis = {
+        code: 'gateway_error',
+        cause: result?.message || `Paystack verification returned HTTP ${response.status}.`,
+        gatewayStatus: String(result?.data?.status || '').toLowerCase() || null,
+        returnedAmount: result?.data?.amount == null ? null : Number(result.data.amount) / 100,
+        returnedCurrency: String(result?.data?.currency || '').toUpperCase() || null,
+        gatewayResponse: result?.data?.gateway_response || null
+      };
+      await admin.from('payments').update({
+        gateway_response: diagnosis.cause,
+        metadata: { ...(payment.metadata || {}), last_verification: diagnosis }
+      }).eq('id', payment.id);
+      return NextResponse.json({ paid: false, ...diagnosis, message: diagnosis.cause }, { status: 502 });
     }
 
-    const paid =
-      result.data?.status === 'success' &&
-      Number(result.data?.amount) / 100 === Number(payment.amount) &&
-      String(result.data?.currency || 'NGN').toUpperCase() === 'NGN';
+    const diagnosis = diagnose(result, Number(payment.amount), String(payment.currency || 'NGN'));
 
-    if (!paid) {
-      // Keep the customer-facing message generic, but expose the exact
-      // verification mismatch in server logs so payment issues can be
-      // diagnosed without leaking gateway data to the browser.
-      console.error('Paystack verification mismatch', {
+    await admin.from('payments').update({
+      gateway_response: diagnosis.gatewayResponse || diagnosis.cause,
+      metadata: { ...(payment.metadata || {}), last_verification: { ...diagnosis, reference } }
+    }).eq('id', payment.id);
+
+    if (diagnosis.code !== 'verified') {
+      console.error('Paystack verification diagnosis', {
         reference,
         paymentId: payment.id,
         orderId: payment.order_id,
-        expectedAmount: Number(payment.amount),
-        returnedAmount: result.data?.amount ?? null,
-        returnedAmountNaira: result.data?.amount != null
-          ? Number(result.data.amount) / 100
-          : null,
-        returnedCurrency: result.data?.currency ?? null,
-        returnedStatus: result.data?.status ?? null,
-        gatewayResponse: result.data?.gateway_response ?? null,
-        paystackReference: result.data?.reference ?? null
+        diagnosis,
+        paystackReference: result?.data?.reference || null
       });
-
-      return NextResponse.json({
-        paid: false,
-        message: 'Payment was not successful or the amount did not match.'
-      });
+      return NextResponse.json({ paid: false, ...diagnosis, message: diagnosis.cause });
     }
 
-    const admin = createAdminClient();
-
-    // Claim the payment atomically: only a payment that is still pending may
-    // transition to paid. This prevents callback/webhook races from fulfilling twice.
     const { data: claimedPayment, error: claimError } = await admin
       .from('payments')
       .update({
         status: 'paid',
         paid_at: result.data.paid_at || new Date().toISOString(),
         gateway_response: result.data.gateway_response || 'Successful',
-        metadata: result.data
+        metadata: { ...(payment.metadata || {}), paystack: result.data, last_verification: diagnosis }
       })
       .eq('id', payment.id)
       .eq('status', 'pending')
@@ -105,15 +157,11 @@ export async function POST(request: Request) {
       .maybeSingle();
 
     if (claimError) {
-      return NextResponse.json({ paid: false, message: 'Could not record the payment.' }, { status: 500 });
+      return NextResponse.json({ paid: false, code: 'database_error', message: 'Paystack confirmed the payment, but PCR could not record it.', cause: claimError.message }, { status: 500 });
     }
 
-    // Another trusted Paystack path may have won the race.
     if (!claimedPayment) {
-      return NextResponse.json({
-        paid: true,
-        message: 'Payment verified successfully.'
-      });
+      return NextResponse.json({ paid: true, code: 'already_paid', message: 'Payment verified successfully.' });
     }
 
     const { error: orderUpdateError } = await admin.from('orders').update({
@@ -122,15 +170,8 @@ export async function POST(request: Request) {
     }).eq('id', payment.order_id);
 
     if (orderUpdateError) {
-      console.error('Paystack payment recorded but order update failed', {
-        paymentId: payment.id,
-        orderId: payment.order_id,
-        error: orderUpdateError.message
-      });
-      return NextResponse.json({
-        paid: true,
-        message: 'Payment verified, but the order status could not be updated automatically.'
-      });
+      console.error('Paystack payment recorded but order update failed', { paymentId: payment.id, orderId: payment.order_id, error: orderUpdateError.message });
+      return NextResponse.json({ paid: true, code: 'order_update_failed', message: 'Payment verified and recorded, but the order status could not be updated.', cause: orderUpdateError.message });
     }
 
     try {
@@ -139,20 +180,18 @@ export async function POST(request: Request) {
       console.error('VTpass fulfillment failed:', error);
     }
 
-    await admin.from('notifications').insert({
-      user_id: user.id,
-      title: 'Payment confirmed',
-      message: 'Payment for your order has been confirmed. Your order is now being processed.'
-    });
+    const { data: orderOwner } = await admin.from('orders').select('customer_id,reference').eq('id', payment.order_id).maybeSingle();
+    if (orderOwner?.customer_id) {
+      await admin.from('notifications').insert({
+        user_id: orderOwner.customer_id,
+        title: 'Payment confirmed',
+        message: 'Payment for order ' + orderOwner.reference + ' has been confirmed. Your order is now being processed.'
+      });
+    }
 
-    return NextResponse.json({
-      paid: true,
-      message: 'Payment verified successfully.'
-    });
-  } catch {
-    return NextResponse.json({
-      paid: false,
-      message: 'Unexpected verification error.'
-    }, { status: 500 });
+    return NextResponse.json({ paid: true, code: 'verified', message: 'Payment verified successfully.' });
+  } catch (error) {
+    console.error('Paystack verification unexpected error:', error);
+    return NextResponse.json({ paid: false, code: 'unexpected_error', message: 'Unexpected verification error.', cause: error instanceof Error ? error.message : 'Unknown error' }, { status: 500 });
   }
 }
