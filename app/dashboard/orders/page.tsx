@@ -15,8 +15,10 @@ export default async function Orders({searchParams}:{searchParams:Promise<{new?:
       {orders.map((o:any)=><div key={o.id} className="rounded-2xl border border-slate-200 p-4">
         <div className="flex flex-wrap items-start justify-between gap-3"><div><p className="font-black"><Link href={'/dashboard/orders/'+o.id} className="hover:text-[#0757d5] hover:underline">{o.services?.title||'Service request'}</Link></p><p className="mt-1 text-xs font-bold text-slate-400">{o.reference} · {new Date(o.created_at).toLocaleDateString()}</p></div><span className="rounded-full bg-blue-50 px-3 py-1 text-xs font-bold capitalize text-[#0757d5]">{String(o.status).replace('_',' ')}</span></div>
         <div className="mt-4 flex flex-wrap items-start justify-between gap-4 text-sm"><div className="flex flex-wrap gap-5"><span><b>Payment:</b> <span className="capitalize">{String(o.payment_status).replace('_',' ')}</span></span><span><b>Amount:</b> ₦{Number(o.amount||0).toLocaleString()}</span></div>
-          {Number(o.amount)>0 && o.payment_status!=='paid' && <div className="flex flex-col items-start gap-2"><RequeryPaymentButton orderId={o.id}/><PayButton orderId={o.id} auto={params.pay==='1' && params.new===o.id}/></div>}
+          {Number(o.amount)>0 && o.payment_status==='pending' && <RequeryPaymentButton orderId={o.id}/>} 
+          {Number(o.amount)>0 && o.payment_status==='failed' && <PayButton orderId={o.id} auto={params.pay==='1' && params.new===o.id}/>} 
         </div>
+        {Number(o.amount)>0 && o.payment_status==='pending' && <p className="mt-2 text-xs text-slate-500">A payment is already in progress. Check its status instead of paying again.</p>}
       </div>)}
     </div>}
   </section>
