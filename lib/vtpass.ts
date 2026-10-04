@@ -126,3 +126,40 @@ export async function fulfillOrder(orderId: string) {
 
   return { status, result };
 }
+
+
+// Compatibility helpers for the existing /api/vtu routes.
+// VTUTelecom's published API does not document a separate variations endpoint,
+// so we do not pretend that VTpass's variation catalogue still exists.
+export async function vtpassVariations(serviceID: string) {
+  return {
+    code: 'NOT_SUPPORTED',
+    message: 'VTUTelecom does not publish a separate variations endpoint. Use the provider plan/network values configured by the application.',
+    serviceID
+  };
+}
+
+export async function verifyMerchant(serviceID: string, billersCode: string, type?: string) {
+  const service = clean(serviceID).toLowerCase();
+  if (service.includes('electric')) {
+    return get('/electricity/verify/', {
+      service: serviceID,
+      serviceID,
+      billersCode,
+      meter_number: billersCode,
+      type
+    });
+  }
+
+  if (service.includes('dstv') || service.includes('gotv') || service.includes('startimes') || service.includes('cable')) {
+    return get('/cabletv/verify/', {
+      service: serviceID,
+      serviceID,
+      billersCode,
+      smartcard_number: billersCode,
+      type
+    });
+  }
+
+  throw new Error('Merchant verification is only supported for cable TV and electricity services.');
+}
