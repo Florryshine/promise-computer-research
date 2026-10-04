@@ -77,11 +77,11 @@ export async function fulfillOrder(orderId:string){
   if(!vtpassConfigured()) throw new Error('VTpass environment variables are missing.');
 
   if(p.kind==='dstv'){
-    const verify=await verifyMerchant('dstv',p.billersCode);
+    const verify=await verifyMerchant('dstv',p.billersCode!);
     if(!verify?.content) throw new Error('DStv smartcard could not be verified.');
   }
   if(p.kind==='electricity'){
-    const verify=await verifyMerchant('ikeja-electric',p.billersCode,p.variation_code);
+    const verify=await verifyMerchant('ikeja-electric',p.billersCode!,p.variation_code);
     if(!verify?.content || verify.content.WrongBillersCode===true) throw new Error('Electricity meter could not be verified.');
   }
 
