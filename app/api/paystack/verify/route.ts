@@ -5,12 +5,13 @@ import { fulfillOrder } from '@/lib/vtpass';
 
 export async function POST(request: Request) {
   try {
-    const { reference } = await request.json();
-    if (!reference) {
-      return NextResponse.json({ paid: false, message: 'Missing payment reference.' }, { status: 400 });
+    const body = await request.json();
+    const reference = String(body?.reference || '').trim();
+    if (!reference || reference.length > 200) {
+      return NextResponse.json({ paid: false, message: 'Invalid payment reference.' }, { status: 400 });
     }
 
-    const secret = process.env.PAYSTACK_SECRET_KEY;
+    const secret = process.env.PAYSTACK_SECRET_KEY?.trim();
     if (!secret) {
       return NextResponse.json({ paid: false, message: 'Payment gateway is not configured.' }, { status: 500 });
     }
@@ -18,22 +19,34 @@ export async function POST(request: Request) {
     const supabase = await createClient();
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) {
-      return NextResponse.json({ paid: false, message: 'Please log in.' }, { status: 401 });
+      return NextResponse.json({ paid: false, message: 'Please log in to view this payment.' }, { status: 401 });
     }
 
-    const { data: payment } = await supabase
+    const { data: payment, error: paymentError } = await supabase
       .from('payments')
       .select('id,order_id,amount,reference,status,orders!inner(customer_id)')
-      .eq('reference', String(reference))
+      .eq('reference', reference)
       .maybeSingle();
 
-    if (!payment || (payment as any).orders?.customer_id !== user.id) {
+    if (paymentError || !payment || (payment as any).orders?.customer_id !== user.id) {
       return NextResponse.json({ paid: false, message: 'Payment not found.' }, { status: 404 });
     }
 
+    // Webhook and callback verification can legitimately arrive at the same time.
+    // Once our database has recorded this payment as paid, do not fulfill it again.
+    if (payment.status === 'paid') {
+      return NextResponse.json({
+        paid: true,
+        message: 'Payment verified successfully.'
+      });
+    }
+
     const response = await fetch(
-      'https://api.paystack.co/transaction/verify/' + encodeURIComponent(String(reference)),
-      { headers: { Authorization: `Bearer ${secret}` } }
+      'https://api.paystack.co/transaction/verify/' + encodeURIComponent(reference),
+      {
+        headers: { Authorization: `Bearer ${secret}` },
+        cache: 'no-store'
+      }
     );
     const result = await response.json();
 
@@ -49,33 +62,62 @@ export async function POST(request: Request) {
       Number(result.data?.amount) / 100 === Number(payment.amount) &&
       String(result.data?.currency || 'NGN').toUpperCase() === 'NGN';
 
-    if (paid) {
-      const admin = createAdminClient();
+    if (!paid) {
+      return NextResponse.json({
+        paid: false,
+        message: 'Payment was not successful or the amount did not match.'
+      });
+    }
 
-      await admin.from('payments').update({
+    const admin = createAdminClient();
+
+    // Claim the payment atomically: only a payment that is still pending may
+    // transition to paid. This prevents callback/webhook races from fulfilling twice.
+    const { data: claimedPayment, error: claimError } = await admin
+      .from('payments')
+      .update({
         status: 'paid',
         paid_at: result.data.paid_at || new Date().toISOString(),
         gateway_response: result.data.gateway_response || 'Successful',
         metadata: result.data
-      }).eq('id', payment.id);
+      })
+      .eq('id', payment.id)
+      .eq('status', 'pending')
+      .select('id')
+      .maybeSingle();
 
-      await admin.from('orders').update({
-        payment_status: 'paid',
-        status: 'processing'
-      }).eq('id', payment.order_id);
-      try { await fulfillOrder(payment.order_id); } catch (error) { console.error('VTpass fulfillment failed:', error); }
-      await admin.from('notifications').insert({
-        user_id: user.id,
-        title: 'Payment confirmed',
-        message: 'Payment for your order has been confirmed. Your order is now being processed.'
+    if (claimError) {
+      return NextResponse.json({ paid: false, message: 'Could not record the payment.' }, { status: 500 });
+    }
+
+    // Another trusted Paystack path may have won the race.
+    if (!claimedPayment) {
+      return NextResponse.json({
+        paid: true,
+        message: 'Payment verified successfully.'
       });
     }
 
+    await admin.from('orders').update({
+      payment_status: 'paid',
+      status: 'processing'
+    }).eq('id', payment.order_id);
+
+    try {
+      await fulfillOrder(payment.order_id);
+    } catch (error) {
+      console.error('VTpass fulfillment failed:', error);
+    }
+
+    await admin.from('notifications').insert({
+      user_id: user.id,
+      title: 'Payment confirmed',
+      message: 'Payment for your order has been confirmed. Your order is now being processed.'
+    });
+
     return NextResponse.json({
-      paid,
-      message: paid
-        ? 'Payment verified successfully.'
-        : 'Payment was not successful or the amount did not match.'
+      paid: true,
+      message: 'Payment verified successfully.'
     });
   } catch {
     return NextResponse.json({
