@@ -88,12 +88,9 @@ create trigger trg_protect_order_financial_fields
 before update on public.orders
 for each row execute function public.protect_order_financial_fields();
 
--- 3) Stop two concurrent payment-initialization requests from creating two
--- pending Paystack payments for the same order. The application already
--- handles a duplicate insert by returning the existing payment.
-create unique index if not exists payments_one_pending_per_order
-on public.payments (order_id)
-where status = 'pending';
+-- 3) The base schema already has a unique partial index on pending
+-- payments (payments_one_pending_per_order_idx). Do not create a second
+-- equivalent index here.
 
 -- 4) Basic database-level sanity check for order amounts.
 alter table public.orders
