@@ -6,7 +6,7 @@ import {createClient} from "@/lib/supabase/client";
 
 type ServiceField={field_key:string;label:string;field_type:string;placeholder:string|null;required:boolean;options:any;sort_order:number};
 
-const VTU_SLUGS=new Set(["airtime-recharge","data-subscription","dstv-subscription","electricity-bill"]);
+const VTU_SLUGS=new Set(["airtime-recharge","data-subscription","dstv-subscription","gotv-subscription","startimes-subscription","electricity-bill"]);
 const NETWORK_SERVICE=(network:string,type:"airtime"|"data")=>{
  const n=network.toLowerCase();
  if(n==="mtn")return type==="airtime"?"mtn":"mtn-data";
@@ -44,7 +44,7 @@ export default function RequestService(){
   const serviceID=kind==="data"?(form.network?NETWORK_SERVICE(form.network,"data"):""):kind==="dstv"?"dstv":"";
   if(!serviceID)return;
   setVariationLoading(true);
-  fetch("/api/vtu/variations?serviceID="+encodeURIComponent(serviceID)).then(r=>r.json()).then(d=>setVariations(d?.content?.variations||[])).catch(()=>setError("Could not load the current VTpass plans.")).finally(()=>setVariationLoading(false));
+  fetch("/api/vtu/variations?serviceID="+encodeURIComponent(serviceID)).then(r=>r.json()).then(d=>setVariations(d?.content?.variations||[])).catch(()=>setError("Could not load the current data plans.")).finally(()=>setVariationLoading(false));
  },[isVTU,kind,form.network]);
 
  const selectedVariation=useMemo(()=>variations.find(v=>String(v.variation_code)===String(form.variation_code)),[variations,form.variation_code]);
@@ -120,9 +120,10 @@ export default function RequestService(){
    const {data:dbService}=await supabase.from("services").select("id,price,price_type,active").eq("slug",params.slug).eq("active",true).maybeSingle();
    if(!dbService)throw new Error("This service is no longer available.");
    const reference="PCR-"+Date.now().toString().slice(-10);
-   const {data:order,error:insertError}=await supabase.from("orders").insert({reference,customer_id:user.id,service_id:dbService.id,status:"pending",payment_status:"unpaid",amount:orderAmount,customer_note:orderForm.request_details||null,form_data:orderForm}).select("id").single();
-   if(insertError)throw new Error(insertError.message);
-   router.push(orderAmount>0?"/dashboard/orders?new="+order.id+"&pay=1":"/dashboard/orders?new="+order.id);
+   const createOrder=await fetch("/api/orders/create",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({slug:params.slug,amount:orderAmount,customer_note:orderForm.request_details||"",form_data:orderForm})});
+   const created=await createOrder.json();
+   if(!createOrder.ok)throw new Error(created?.error||"Could not submit this request.");
+   router.push(orderAmount>0?"/dashboard/orders?new="+created.id+"&pay=1":"/dashboard/orders?new="+created.id);
   }catch(err){setError(err instanceof Error?err.message:"Could not submit this request.");setLoading(false);}
  }
 
@@ -131,7 +132,7 @@ export default function RequestService(){
 
  return <main className="section bg-slate-50"><div className="container"><div className="mx-auto max-w-2xl rounded-3xl bg-white p-6 shadow-soft sm:p-8">
   <p className="text-xs font-bold uppercase tracking-[.16em] text-[#0757d5]">Service request</p><h1 className="mt-2 text-3xl font-black">{service.title}</h1>
-  <p className="mt-2 text-sm text-slate-500">{isVTU?"Select your live provider plan/details. Payment is made through Paystack, then the service is fulfilled automatically through VTpass.":service.price_type==="fixed"&&service.price!=null?"Price: ₦"+Number(service.price).toLocaleString()+".":"Submit your details and we will review the request."}</p>
+  <p className="mt-2 text-sm text-slate-500">{isVTU?"Select your live provider plan/details. Payment is made securely through Paystack and the service is processed automatically.":service.price_type==="fixed"&&service.price!=null?"Price: ₦"+Number(service.price).toLocaleString()+".":"Submit your details and we will review the request."}</p>
   {error&&<div className="mt-5 rounded-xl border border-red-200 bg-red-50 p-3 text-sm text-red-700">{error}</div>}
   <form onSubmit={submit} className="mt-7 space-y-5">
    {[["full_name","Full name","text"],["phone","Phone number","tel"],["email","Email","email"]].map(([k,l,t])=><label key={k} className="block text-sm font-bold">{l}<input required value={form[k]??""} onChange={e=>set(k,e.target.value)} type={t} className="mt-2 w-full rounded-xl border border-slate-200 px-4 py-3"/></label>)}
