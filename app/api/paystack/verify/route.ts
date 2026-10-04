@@ -63,6 +63,24 @@ export async function POST(request: Request) {
       String(result.data?.currency || 'NGN').toUpperCase() === 'NGN';
 
     if (!paid) {
+      // Keep the customer-facing message generic, but expose the exact
+      // verification mismatch in server logs so payment issues can be
+      // diagnosed without leaking gateway data to the browser.
+      console.error('Paystack verification mismatch', {
+        reference,
+        paymentId: payment.id,
+        orderId: payment.order_id,
+        expectedAmount: Number(payment.amount),
+        returnedAmount: result.data?.amount ?? null,
+        returnedAmountNaira: result.data?.amount != null
+          ? Number(result.data.amount) / 100
+          : null,
+        returnedCurrency: result.data?.currency ?? null,
+        returnedStatus: result.data?.status ?? null,
+        gatewayResponse: result.data?.gateway_response ?? null,
+        paystackReference: result.data?.reference ?? null
+      });
+
       return NextResponse.json({
         paid: false,
         message: 'Payment was not successful or the amount did not match.'
@@ -98,10 +116,22 @@ export async function POST(request: Request) {
       });
     }
 
-    await admin.from('orders').update({
+    const { error: orderUpdateError } = await admin.from('orders').update({
       payment_status: 'paid',
       status: 'processing'
     }).eq('id', payment.order_id);
+
+    if (orderUpdateError) {
+      console.error('Paystack payment recorded but order update failed', {
+        paymentId: payment.id,
+        orderId: payment.order_id,
+        error: orderUpdateError.message
+      });
+      return NextResponse.json({
+        paid: true,
+        message: 'Payment verified, but the order status could not be updated automatically.'
+      });
+    }
 
     try {
       await fulfillOrder(payment.order_id);
