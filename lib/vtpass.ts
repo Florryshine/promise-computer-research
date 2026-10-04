@@ -95,18 +95,37 @@ export async function fulfillOrder(orderId: string) {
   }
 
   let result: any;
-  if (p.kind === 'airtime') {
-    result = await get('/airtime/', { network: p.network, phone: p.phone, phone_number: p.phone, amount: p.amount, request_id: rid });
-  } else if (p.kind === 'data') {
-    result = await get('/data/', { network: p.network, phone: p.phone, phone_number: p.phone, variation_code: p.variation, plan: p.variation, amount: p.amount, request_id: rid });
-  } else if (p.kind === 'cable') {
-    const v = await get('/cabletv/verify/', { service: p.service, serviceID: p.service, billersCode: p.billersCode, smartcard_number: p.billersCode });
-    if (failed(v)) throw new Error(v?.message || v?.detail || 'Cable customer could not be verified.');
-    result = await get('/cabletv/', { service: p.service, serviceID: p.service, billersCode: p.billersCode, smartcard_number: p.billersCode, variation_code: p.variation, plan: p.variation, amount: p.amount, phone: p.phone, subscription_type: p.subscription_type, request_id: rid });
-  } else {
-    const v = await get('/electricity/verify/', { service: p.service, serviceID: p.service, billersCode: p.billersCode, meter_number: p.billersCode, type: p.meter_type });
-    if (failed(v)) throw new Error(v?.message || v?.detail || 'Electricity meter could not be verified.');
-    result = await get('/electricity/', { service: p.service, serviceID: p.service, billersCode: p.billersCode, meter_number: p.billersCode, type: p.meter_type, meter_type: p.meter_type, amount: p.amount, phone: p.phone, request_id: rid });
+  try {
+    if (p.kind === 'airtime') {
+      result = await get('/airtime/', { network: p.network, phone: p.phone, phone_number: p.phone, amount: p.amount, request_id: rid });
+    } else if (p.kind === 'data') {
+      result = await get('/data/', { network: p.network, phone: p.phone, phone_number: p.phone, variation_code: p.variation, plan: p.variation, amount: p.amount, request_id: rid });
+    } else if (p.kind === 'cable') {
+      const v = await get('/cabletv/verify/', { service: p.service, serviceID: p.service, billersCode: p.billersCode, smartcard_number: p.billersCode });
+      if (failed(v)) throw new Error(v?.message || v?.detail || 'Cable customer could not be verified.');
+      result = await get('/cabletv/', { service: p.service, serviceID: p.service, billersCode: p.billersCode, smartcard_number: p.billersCode, variation_code: p.variation, plan: p.variation, amount: p.amount, phone: p.phone, subscription_type: p.subscription_type, request_id: rid });
+    } else {
+      const v = await get('/electricity/verify/', { service: p.service, serviceID: p.service, billersCode: p.billersCode, meter_number: p.billersCode, type: p.meter_type });
+      if (failed(v)) throw new Error(v?.message || v?.detail || 'Electricity meter could not be verified.');
+      result = await get('/electricity/', { service: p.service, serviceID: p.service, billersCode: p.billersCode, meter_number: p.billersCode, type: p.meter_type, meter_type: p.meter_type, amount: p.amount, phone: p.phone, request_id: rid });
+    }
+  } catch (error) {
+    const message = error instanceof Error ? error.message : 'Provider request failed.';
+    await admin.from('provider_transactions').update({
+      status: 'failed',
+      provider_status: 'error',
+      response: { error: message }
+    }).eq('request_id', rid);
+    await admin.from('orders').update({
+      status: 'needs_information',
+      admin_note: 'Payment received, but automatic provider fulfillment failed: ' + message
+    }).eq('id', order.id);
+    await admin.from('notifications').insert({
+      user_id: order.customer_id,
+      title: 'Payment received — order needs attention',
+      message: 'Your payment was successful, but the service could not be completed automatically. We are reviewing order ' + order.reference + '.'
+    });
+    return { status: 'failed', message };
   }
 
   const ok = successful(result), bad = failed(result);
