@@ -2,6 +2,7 @@ import crypto from 'crypto';
 import { NextResponse } from 'next/server';
 import { createAdminClient } from '@/lib/supabase/admin';
 import { fulfillOrder } from '@/lib/vtpass';
+import { checkPaystackAmount } from '@/lib/paystack';
 
 export async function POST(request: Request) {
   try {
@@ -42,10 +43,11 @@ export async function POST(request: Request) {
       return NextResponse.json({ received: true });
     }
 
-    const paidAmount = Number(data.amount || 0) / 100;
     const currency = String(data.currency || 'NGN').toUpperCase();
+    const amountCheck = checkPaystackAmount(data, Number(payment.amount));
 
-    if (paidAmount !== Number(payment.amount) || currency !== 'NGN') {
+    if (!amountCheck.ok || currency !== 'NGN') {
+      console.error('Paystack webhook rejected:', amountCheck.cause || `currency ${currency}`);
       return new NextResponse('Amount or currency mismatch', { status: 400 });
     }
 
@@ -65,10 +67,11 @@ export async function POST(request: Request) {
     if (claimError) return new NextResponse('Could not record payment', { status: 500 });
     if (!claimedPayment) return NextResponse.json({ received: true });
 
-    await supabase.from('orders').update({
+    const { error: orderUpdateError } = await supabase.from('orders').update({
       payment_status: 'paid',
       status: 'processing'
     }).eq('id', payment.order_id);
+    if (orderUpdateError) console.error('Webhook order update failed:', orderUpdateError.message);
 
     try {
       await fulfillOrder(payment.order_id);
