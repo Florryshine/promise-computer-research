@@ -5,12 +5,14 @@ import { createAdminClient } from '@/lib/supabase/admin';
 function diagnose(result: any, expectedAmount: number, expectedCurrency: string) {
   const gatewayStatus = String(result?.data?.status || '').toLowerCase();
   const returnedAmount = result?.data?.amount == null ? null : Number(result.data.amount) / 100;
+  const requestedAmount = result?.data?.requested_amount == null ? null : Number(result.data.requested_amount) / 100;
   const returnedCurrency = String(result?.data?.currency || '').toUpperCase();
   const expected = expectedCurrency.toUpperCase();
-  if (gatewayStatus !== 'success') return { code: gatewayStatus === 'pending' || gatewayStatus === 'ongoing' ? 'payment_pending' : gatewayStatus === 'abandoned' ? 'payment_abandoned' : 'payment_not_successful', cause: gatewayStatus ? `Paystack returned transaction status: ${gatewayStatus}.` : 'Paystack did not return a successful transaction status.', gatewayStatus, returnedAmount, returnedCurrency, gatewayResponse: result?.data?.gateway_response || null };
-  if (returnedAmount !== expectedAmount) return { code: 'amount_mismatch', cause: `Paystack returned ₦${returnedAmount ?? 'unknown'}, but PCR expected ₦${expectedAmount}.`, gatewayStatus, returnedAmount, returnedCurrency, gatewayResponse: result?.data?.gateway_response || null };
-  if (returnedCurrency !== expected) return { code: 'currency_mismatch', cause: `Paystack returned ${returnedCurrency || 'unknown'}, but PCR expected ${expected}.`, gatewayStatus, returnedAmount, returnedCurrency, gatewayResponse: result?.data?.gateway_response || null };
-  return { code: 'verified', cause: 'Paystack confirmed a successful transaction with the expected amount and currency.', gatewayStatus, returnedAmount, returnedCurrency, gatewayResponse: result?.data?.gateway_response || null };
+  if (gatewayStatus !== 'success') return { code: gatewayStatus === 'pending' || gatewayStatus === 'ongoing' ? 'payment_pending' : gatewayStatus === 'abandoned' ? 'payment_abandoned' : 'payment_not_successful', cause: gatewayStatus ? `Paystack returned transaction status: ${gatewayStatus}.` : 'Paystack did not return a successful transaction status.', gatewayStatus, returnedAmount, requestedAmount, returnedCurrency, gatewayResponse: result?.data?.gateway_response || null };
+  if (requestedAmount !== null && requestedAmount !== expectedAmount) return { code: 'amount_mismatch', cause: `Paystack reports a requested amount of ₦${requestedAmount}, but PCR expected ₦${expectedAmount}.`, gatewayStatus, returnedAmount, requestedAmount, returnedCurrency, gatewayResponse: result?.data?.gateway_response || null };
+  if (requestedAmount === null && returnedAmount !== expectedAmount) return { code: 'amount_mismatch', cause: `Paystack returned ₦${returnedAmount ?? 'unknown'}, but PCR expected ₦${expectedAmount}.`, gatewayStatus, returnedAmount, requestedAmount, returnedCurrency, gatewayResponse: result?.data?.gateway_response || null };
+  if (returnedCurrency !== expected) return { code: 'currency_mismatch', cause: `Paystack returned ${returnedCurrency || 'unknown'}, but PCR expected ${expected}.`, gatewayStatus, returnedAmount, requestedAmount, returnedCurrency, gatewayResponse: result?.data?.gateway_response || null };
+  return { code: 'verified', cause: requestedAmount !== null && returnedAmount !== null && returnedAmount !== expectedAmount ? `Paystack confirmed the ₦${expectedAmount} transaction. The customer was charged ₦${returnedAmount}, including Paystack's transaction fee.` : 'Paystack confirmed a successful transaction with the expected amount and currency.', gatewayStatus, returnedAmount, requestedAmount, returnedCurrency, gatewayResponse: result?.data?.gateway_response || null };
 }
 
 export async function POST(request: Request) {
@@ -41,7 +43,7 @@ export async function POST(request: Request) {
     try { result = await response.json(); } catch { result = { status: false, message: 'Paystack returned an invalid response.' }; }
 
     if (!response.ok || !result?.status) {
-      const diagnosis = { code: 'gateway_error', cause: result?.message || `Paystack verification returned HTTP ${response.status}.`, gatewayStatus: String(result?.data?.status || '').toLowerCase() || null, returnedAmount: result?.data?.amount == null ? null : Number(result.data.amount) / 100, returnedCurrency: String(result?.data?.currency || '').toUpperCase() || null, gatewayResponse: result?.data?.gateway_response || null };
+      const diagnosis = { code: 'gateway_error', cause: result?.message || `Paystack verification returned HTTP ${response.status}.`, gatewayStatus: String(result?.data?.status || '').toLowerCase() || null, returnedAmount: result?.data?.amount == null ? null : Number(result.data.amount) / 100, requestedAmount: result?.data?.requested_amount == null ? null : Number(result.data.requested_amount) / 100, returnedCurrency: String(result?.data?.currency || '').toUpperCase() || null, gatewayResponse: result?.data?.gateway_response || null };
       await admin.from('payments').update({ gateway_response: diagnosis.cause, metadata: { ...(payment.metadata || {}), last_verification: diagnosis } }).eq('id', payment.id);
       return NextResponse.json({ paid: false, ...diagnosis, message: diagnosis.cause }, { status: 502 });
     }
