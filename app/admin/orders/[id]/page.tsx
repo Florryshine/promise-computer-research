@@ -4,7 +4,7 @@ import {createClient} from '@/lib/supabase/server';
 import {createAdminClient} from '@/lib/supabase/admin';
 import AdminOrderActions from '../../OrderActions';
 import AdminDocumentActions from './AdminDocumentActions';
-import RequeryPaymentButton from './RequeryPaymentButton';
+import RequeryPaymentButton from '@/components/payments/RequeryPaymentButton';
 
 export default async function AdminOrderDetail({params}:{params:Promise<{id:string}>}){
   const {id}=await params;
@@ -18,13 +18,15 @@ export default async function AdminOrderDetail({params}:{params:Promise<{id:stri
   if(error||!order)notFound();
   const {data:providerTransaction}=await admin.from('provider_transactions').select('provider,request_id,service_id,provider_reference,provider_status,status,amount,request_data,response,created_at,updated_at').eq('order_id',id).maybeSingle(); const {data:docs}=await admin.from('order_documents').select('id,file_name,storage_path,mime_type,size_bytes,created_at').eq('order_id',id).order('created_at',{ascending:false});
   const documents=await Promise.all((docs||[]).map(async d=>({ ...d, url:(await admin.storage.from('order-documents').createSignedUrl(d.storage_path,3600)).data?.signedUrl||null })));
+  const customer=order.profiles;
+  const service=order.services;
   return <div>
     <div className="mb-5"><Link href="/admin" className="text-sm font-bold text-[#0757d5]">← Back to orders</Link></div>
     <div className="grid gap-5 lg:grid-cols-[1.5fr_1fr]">
       <div className="space-y-5">
         <section className="rounded-3xl bg-white p-5 shadow-sm sm:p-7">
-          <div className="flex flex-wrap items-start justify-between gap-4"><div><p className="text-xs font-bold uppercase tracking-wide text-slate-400">Order</p><h1 className="mt-1 text-2xl font-black">{order.services?.[0]?.title||'Service request'}</h1><p className="mt-1 text-xs font-bold text-slate-400">{order.reference} · {new Date(order.created_at).toLocaleString()}</p></div><div className="text-right"><p className="font-black">₦{Number(order.amount||0).toLocaleString()}</p><p className="mt-1 text-sm font-black capitalize text-slate-700">Payment: {String(order.payment_status).replace('_',' ')}</p><p className="mt-1 text-sm font-black capitalize text-slate-700">Order: {String(order.status).replace('_',' ')}</p></div></div>
-          {order.payment_status!=='paid'&&Number(order.amount||0)>0&&<RequeryPaymentButton orderId={order.id}/>}<div className="mt-6 rounded-2xl border border-slate-200 p-4"><p className="text-xs font-black uppercase tracking-wide text-slate-400">Customer</p><p className="mt-2 font-bold">{order.profiles?.[0]?.full_name||'Unknown'}</p><p className="mt-1 text-sm text-slate-600">{order.profiles?.[0]?.phone||'No phone number'}</p></div>
+          <div className="flex flex-wrap items-start justify-between gap-4"><div><p className="text-xs font-bold uppercase tracking-wide text-slate-400">Order</p><h1 className="mt-1 text-2xl font-black">{service?.title||'Service request'}</h1><p className="mt-1 text-xs font-bold text-slate-400">{order.reference} · {new Date(order.created_at).toLocaleString()}</p></div><div className="text-right"><p className="font-black">₦{Number(order.amount||0).toLocaleString()}</p><p className="mt-1 text-sm font-black capitalize text-slate-700">Payment: {String(order.payment_status).replace('_',' ')}</p><p className="mt-1 text-sm font-black capitalize text-slate-700">Order: {String(order.status).replace('_',' ')}</p></div></div>
+          {order.payment_status!=='paid'&&Number(order.amount||0)>0&&<RequeryPaymentButton orderId={order.id}/>}<div className="mt-6 rounded-2xl border border-slate-200 p-4"><p className="text-xs font-black uppercase tracking-wide text-slate-400">Customer</p><p className="mt-2 font-bold">{customer?.full_name||'Unknown'}</p><p className="mt-1 text-sm text-slate-600">{customer?.phone||'No phone number'}</p></div>
           {order.customer_note&&<div className="mt-4 rounded-2xl bg-slate-50 p-4"><p className="text-xs font-black uppercase tracking-wide text-slate-400">Request details</p><p className="mt-2 whitespace-pre-wrap text-sm text-slate-700">{order.customer_note}</p></div>}
           {order.form_data&&Object.keys(order.form_data).length>0&&<div className="mt-4"><p className="text-xs font-black uppercase tracking-wide text-slate-400">Submitted information</p><div className="mt-3 grid gap-3 sm:grid-cols-2">{Object.entries(order.form_data as Record<string,unknown>).map(([key,value])=><div key={key} className="rounded-2xl border border-slate-200 p-4"><p className="text-[11px] font-bold uppercase tracking-wide text-slate-400">{key.replaceAll('_',' ')}</p><p className="mt-1 break-words text-sm font-semibold text-slate-700">{String(value??'—')}</p></div>)}</div></div>}
         </section>
