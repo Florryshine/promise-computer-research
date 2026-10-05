@@ -79,7 +79,15 @@ export async function POST(request: Request) {
 
     const { data: payment } = await admin.from('payments').select('id,order_id,reference,amount,currency,status,gateway_response,metadata').eq('order_id', order.id).order('created_at', { ascending: false }).limit(1).maybeSingle();
     if (!payment) return NextResponse.json({ ok: false, code: 'payment_not_found', message: 'No Paystack payment record exists for this order.' }, { status: 404 });
-    if (payment.status === 'paid') return NextResponse.json({ ok: true, code: 'already_paid', message: 'Payment is already recorded as paid.' });
+    if (payment.status === 'paid') {
+      try {
+        const fulfillment = await fulfillOrder(order.id);
+        return NextResponse.json({ ok: true, code: 'already_paid_fulfillment_attempted', message: fulfillment.message || 'Payment is already paid; fulfillment was attempted.', fulfillment });
+      } catch (error) {
+        console.error('Provider fulfillment failed for already-paid order:', error);
+        return NextResponse.json({ ok: true, code: 'already_paid_fulfillment_failed', message: 'Payment is paid, but provider fulfillment failed.', cause: error instanceof Error ? error.message : 'Unknown fulfillment error' });
+      }
+    }
 
     const response = await fetch('https://api.paystack.co/transaction/verify/' + encodeURIComponent(payment.reference), { headers: { Authorization: `Bearer ${secret}` }, cache: 'no-store' });
     let result: any;
