@@ -1,5 +1,5 @@
 type PaystackTransactionResult = {
-  status?: string;
+  status?: boolean;
   message?: string;
   data?: Record<string, any>;
 };
