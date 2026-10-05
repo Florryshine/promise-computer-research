@@ -1,7 +1,7 @@
 import {createClient} from '@/lib/supabase/server';
 import Link from 'next/link';
 import PayButton from './PayButton';
-import RequeryPaymentButton from './RequeryPaymentButton';
+import RequeryPaymentButton from '@/components/payments/RequeryPaymentButton';
 
 export default async function Orders({searchParams}:{searchParams:Promise<{new?:string;pay?:string}>}){
   const params=await searchParams;
