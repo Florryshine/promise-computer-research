@@ -19,7 +19,7 @@ export default async function AdminOrderDetail({params}:{params:Promise<{id:stri
   const {data:providerTransaction}=await admin.from('provider_transactions').select('provider,request_id,service_id,provider_reference,provider_status,status,amount,request_data,response,created_at,updated_at').eq('order_id',id).maybeSingle(); const {data:docs}=await admin.from('order_documents').select('id,file_name,storage_path,mime_type,size_bytes,created_at').eq('order_id',id).order('created_at',{ascending:false});
   const documents=await Promise.all((docs||[]).map(async d=>({ ...d, url:(await admin.storage.from('order-documents').createSignedUrl(d.storage_path,3600)).data?.signedUrl||null })));
   const customer=order.profiles;
-  const service=order.services;
+  const service=Array.isArray(order.services)?order.services[0]:order.services;
   return <div>
     <div className="mb-5"><Link href="/admin" className="text-sm font-bold text-[#0757d5]">← Back to orders</Link></div>
     <div className="grid gap-5 lg:grid-cols-[1.5fr_1fr]">
