@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
 import { createAdminClient } from '@/lib/supabase/admin';
+import { fulfillOrder } from '@/lib/vtpass';
 
 function diagnose(result: any, expectedAmount: number, expectedCurrency: string) {
   const gatewayStatus = String(result?.data?.status || '').toLowerCase();
