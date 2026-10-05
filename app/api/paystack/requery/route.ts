@@ -82,7 +82,8 @@ export async function POST(request: Request) {
     if (payment.status === 'paid') {
       try {
         const fulfillment = await fulfillOrder(order.id);
-        return NextResponse.json({ ok: true, code: 'already_paid_fulfillment_attempted', message: fulfillment.message || 'Payment is already paid; fulfillment was attempted.', fulfillment });
+        const detail = fulfillment.message || ('result' in fulfillment && fulfillment.result ? JSON.stringify(fulfillment.result).slice(0, 300) : '');
+        return NextResponse.json({ ok: true, code: 'already_paid_fulfillment_attempted', message: 'Payment is paid. Fulfillment status: ' + fulfillment.status + '.', cause: detail || undefined, fulfillment });
       } catch (error) {
         console.error('Provider fulfillment failed for already-paid order:', error);
         return NextResponse.json({ ok: true, code: 'already_paid_fulfillment_failed', message: 'Payment is paid, but provider fulfillment failed.', cause: error instanceof Error ? error.message : 'Unknown fulfillment error' });
