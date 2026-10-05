@@ -31,7 +31,8 @@ function network(v: unknown) {
 }
 
 function normalize(order: any) {
-  const slug = String(order.services?.slug || '');
+  const service = Array.isArray(order.services) ? order.services[0] : order.services;
+  const slug = String(service?.slug || '');
   const f = (order.form_data || {}) as Record<string, any>;
   if (slug === 'airtime-recharge') return { kind: 'airtime', network: network(f.network), phone: clean(f.phone_number || f.phone), amount: Number(f.provider_amount || f.amount) };
   if (slug === 'data-subscription') return { kind: 'data', network: network(f.network), phone: clean(f.phone_number || f.phone), variation: clean(f.variation_code || f.plan || f.plan_code), amount: Number(f.provider_amount || f.amount) };
@@ -96,11 +97,13 @@ export async function fulfillOrder(orderId: string) {
   const { data: existing } = await admin.from('provider_transactions').select('*').eq('request_id', rid).maybeSingle();
   if (existing?.status === 'successful') return { status: 'successful', message: 'Already fulfilled.', transaction: existing };
 
-  // Never contact the provider twice for one order: a repeat call could deliver the airtime twice.
-  if (existing && existing.response && Object.keys(existing.response).length > 0) {
+  // If the provider has already accepted/processed this request, do not send it again.
+  // A recorded failure is retryable; an ambiguous/pending response is not, because
+  // retrying could double-deliver airtime/data if the provider actually accepted it.
+  if (existing && existing.response && Object.keys(existing.response).length > 0 && existing.status !== 'failed') {
     return {
       status: String(existing.status),
-      message: 'Provider was already contacted (status: ' + existing.status + ', provider said: ' + (existing.provider_status || 'no detail') + '). Not sending again to avoid double delivery. Check the VTUTelecom dashboard.',
+      message: 'Provider was already contacted (status: ' + existing.status + ', provider said: ' + (existing.provider_status || 'no detail') + '). Not sending again to avoid double delivery. Check the VTUTelecom dashboard before retrying.',
       result: existing.response
     };
   }
