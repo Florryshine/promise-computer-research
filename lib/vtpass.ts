@@ -64,6 +64,14 @@ function failed(data: any) {
   return data?.success === false || /"status"\s*:\s*"(failed|failure|error|rejected|declined|cancelled)"/.test(s);
 }
 
+async function markNeedsAttention(admin: any, order: any, message: string) {
+  await admin.from('orders').update({
+    status: 'needs_information',
+    admin_note: 'Payment received, but fulfillment could not start: ' + message
+  }).eq('id', order.id);
+  return { status: 'failed', message };
+}
+
 export async function fulfillOrder(orderId: string) {
   const admin = createAdminClient();
   const { data: order, error } = await admin.from('orders')
@@ -75,16 +83,27 @@ export async function fulfillOrder(orderId: string) {
 
   const p = normalize(order);
   if (!p) return { status: 'skipped', message: 'Service is not configured for VTUTelecom automation.' };
-  if (!Number.isFinite(p.amount) || p.amount <= 0) throw new Error('Provider purchase amount is missing.');
-  if (['airtime','data'].includes(p.kind) && !p.phone) throw new Error('Phone number is missing.');
-  if (p.kind === 'airtime' && !p.network) throw new Error('Airtime network is missing.');
-  if (p.kind === 'data' && (!p.network || !p.variation)) throw new Error('Data network or plan is missing.');
-  if (p.kind === 'cable' && !p.billersCode) throw new Error('Smartcard/customer number is missing.');
-  if (p.kind === 'electricity' && !p.billersCode) throw new Error('Meter number is missing.');
+  const problem =
+    !Number.isFinite(p.amount) || p.amount <= 0 ? 'Provider purchase amount is missing.' :
+    ['airtime', 'data'].includes(p.kind) && !p.phone ? 'Phone number is missing.' :
+    p.kind === 'airtime' && !p.network ? 'Airtime network is missing.' :
+    p.kind === 'data' && (!p.network || !p.variation) ? 'Data network or plan is missing.' :
+    p.kind === 'cable' && !p.billersCode ? 'Smartcard/customer number is missing.' :
+    p.kind === 'electricity' && !p.billersCode ? 'Meter number is missing.' : '';
+  if (problem) return markNeedsAttention(admin, order, problem);
 
   const rid = requestId(order);
   const { data: existing } = await admin.from('provider_transactions').select('*').eq('request_id', rid).maybeSingle();
   if (existing?.status === 'successful') return { status: 'successful', message: 'Already fulfilled.', transaction: existing };
+
+  // Never contact the provider twice for one order: a repeat call could deliver the airtime twice.
+  if (existing && existing.response && Object.keys(existing.response).length > 0) {
+    return {
+      status: String(existing.status),
+      message: 'Provider was already contacted (status: ' + existing.status + ', provider said: ' + (existing.provider_status || 'no detail') + '). Not sending again to avoid double delivery. Check the VTUTelecom dashboard.',
+      result: existing.response
+    };
+  }
 
   if (!existing) {
     const { error: e } = await admin.from('provider_transactions').insert({
@@ -138,9 +157,11 @@ export async function fulfillOrder(orderId: string) {
 
   if (ok) {
     await admin.from('orders').update({ status: 'completed', admin_note: 'VTUTelecom fulfillment completed automatically.' }).eq('id', order.id);
-    await admin.from('notifications').insert({ user_id: order.customer_id, title: 'Order completed', message: 'Your ' + (order.services?.[0]?.title || 'service') + ' order ' + order.reference + ' was completed automatically.' });
+    await admin.from('notifications').insert({ user_id: order.customer_id, title: 'Order completed', message: 'Your ' + ((((Array.isArray(order.services) ? order.services[0] : order.services) as any)?.title || 'service')) + ' order ' + order.reference + ' was completed automatically.' });
   } else if (bad) {
     await admin.from('orders').update({ status: 'needs_information', admin_note: 'VTUTelecom could not complete this order automatically. Provider response was recorded for review.' }).eq('id', order.id);
+  } else {
+    await admin.from('orders').update({ admin_note: 'VTUTelecom returned an unconfirmed status. Check the VTUTelecom dashboard before retrying: ' + JSON.stringify(result).slice(0, 300) }).eq('id', order.id);
   }
 
   return { status, result };
