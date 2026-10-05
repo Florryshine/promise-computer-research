@@ -40,6 +40,12 @@ export async function POST(request: Request) {
     // verify the same transaction. A payment already claimed as paid must not
     // trigger fulfillment again.
     if (payment.status === 'paid') {
+      try {
+        const fulfillment = await fulfillOrder(payment.order_id);
+        console.log('Provider fulfillment after already-paid webhook:', fulfillment);
+      } catch (error) {
+        console.error('Provider fulfillment failed after already-paid webhook:', error);
+      }
       return NextResponse.json({ received: true });
     }
 
