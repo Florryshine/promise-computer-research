@@ -86,3 +86,23 @@ export async function verifyPaystackTransaction(reference: string, secret: strin
 
   return { response, result };
 }
+
+
+/**
+ * Amount check for Paystack data when the customer bears the Paystack fee.
+ * requested_amount is the amount PCR requested; amount is the gross amount charged.
+ * The requested amount must match the order and the customer must not underpay.
+ */
+export function checkPaystackAmount(data: Record<string, any> | undefined, expectedAmount: number) {
+  const charged = data?.amount == null ? null : Number(data.amount) / 100;
+  const requested = data?.requested_amount == null ? null : Number(data.requested_amount) / 100;
+  if (charged === null) return { ok: false, cause: 'Paystack did not return a charged amount.' };
+  const reference = requested ?? charged;
+  if (reference !== expectedAmount) {
+    return { ok: false, cause: `Amount mismatch: expected ₦${expectedAmount}, Paystack ${requested !== null ? 'requested' : 'returned'} ₦${reference}.` };
+  }
+  if (charged < expectedAmount) {
+    return { ok: false, cause: `Underpayment: expected at least ₦${expectedAmount}, Paystack charged ₦${charged}.` };
+  }
+  return { ok: true, cause: '' };
+}
