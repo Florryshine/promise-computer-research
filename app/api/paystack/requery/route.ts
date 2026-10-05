@@ -17,6 +17,13 @@ function diagnose(result: any, expectedAmount: number, expectedCurrency: string)
     gatewayResponse: result?.data?.gateway_response || null
   };
 
+  if (chargedAmount !== null && chargedAmount < expectedAmount) return {
+    code: 'amount_mismatch',
+    cause: `Underpayment: expected at least ₦${expectedAmount}, Paystack charged ₦${chargedAmount}.`,
+    gatewayStatus: status, returnedAmount: chargedAmount, requestedAmount, returnedCurrency: currency,
+    gatewayResponse: result?.data?.gateway_response || null
+  };
+
   // When Paystack is configured to pass its transaction fee to the customer,
   // data.amount is the gross amount the customer paid while requested_amount
   // is the original amount PCR requested. Verify the latter against the order.
