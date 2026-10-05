@@ -86,7 +86,7 @@ export async function POST(request: Request) {
         return NextResponse.json({ ok: true, code: 'already_paid_fulfillment_attempted', message: 'Payment is paid. Fulfillment status: ' + fulfillment.status + '.', cause: detail || undefined, fulfillment });
       } catch (error) {
         console.error('Provider fulfillment failed for already-paid order:', error);
-        return NextResponse.json({ ok: true, code: 'already_paid_fulfillment_failed', message: 'Payment is paid, but provider fulfillment failed.', cause: error instanceof Error ? error.message : 'Unknown fulfillment error' });
+        return NextResponse.json({ ok: true, code: 'already_paid_fulfillment_failed', message: 'Payment is paid, but provider fulfillment failed.', cause: (error as any)?.message || (error as any)?.details || (error as any)?.hint || JSON.stringify(error) || 'Unknown fulfillment error' });
       }
     }
 
