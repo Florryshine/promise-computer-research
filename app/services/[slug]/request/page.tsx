@@ -20,7 +20,7 @@ const FEE:Record<string,number>={airtime:0,data:0,cable:1000,electricity:500,exa
 export default function RequestService(){
  const params=useParams<{slug:string}>(),router=useRouter();
  const [service,setService]=useState<any>(null),[fields,setFields]=useState<ServiceField[]>([]),[form,setForm]=useState<Record<string,string>>({});
- const [variations,setVariations]=useState<any[]>([]),[loading,setLoading]=useState(false),[pageLoading,setPageLoading]=useState(true),[variationLoading,setVariationLoading]=useState(false),[error,setError]=useState(""),[verified,setVerified]=useState<any>(null);
+ const [loading,setLoading]=useState(false),[pageLoading,setPageLoading]=useState(true),[error,setError]=useState("");
 
  const isVTU=VTU_SLUGS.has(params.slug);
  const kind=params.slug==="airtime-recharge"?"airtime":params.slug==="data-subscription"?"data":["dstv-subscription","gotv-subscription","startimes-subscription"].includes(params.slug)?"cable":params.slug==="electricity-bill"?"electricity":params.slug==="exam-pins"?"exam":params.slug==="data-pins"?"datapin":"";
@@ -40,16 +40,10 @@ export default function RequestService(){
   setPageLoading(false);
  })();},[params.slug,router]);
 
- useEffect(()=>{if(!isVTU)return;setVariations([]);setVerified(null);
-  const serviceID=kind==="cable"?(form.cablename||""):"";
-  if(!serviceID||kind==="data")return;
-  setVariationLoading(true);
-  fetch("/api/vtu/variations?serviceID="+encodeURIComponent(serviceID)).then(r=>r.json()).then(d=>setVariations(d?.content?.variations||[])).catch(()=>setError("Could not load the current data plans.")).finally(()=>setVariationLoading(false));
- },[isVTU,kind,form.network]);
 
- const selectedVariation=useMemo(()=>variations.find(v=>String(v.variation_code)===String(form.variation_code)),[variations,form.variation_code]);
+
  const isDStvRenew=false;
- const providerAmount=["airtime","electricity","exam","datapin"].includes(kind)?Number(form.amount||0):Number(selectedVariation?.variation_amount||form.provider_amount||0);
+ const providerAmount=["airtime","electricity","exam","datapin"].includes(kind)?Number(form.amount||0):Number(form.provider_amount||0);
  const serviceFee=FEE[kind]||0;
  const total=providerAmount+serviceFee;
 
@@ -62,22 +56,6 @@ export default function RequestService(){
   return <input {...common} type={f.field_type==="number"?"number":f.field_type==="email"?"email":f.field_type==="tel"?"tel":"text"} className="mt-2 w-full rounded-xl border border-slate-200 px-4 py-3"/>;
  }
 
- async function verifyCustomer(){
-  if(kind==="cable"||kind==="electricity"){
-   setError("");setVerified(null);
-   const serviceID=kind==="cable"?form.cablename:form.disco;
-   const billersCode=kind==="cable"?form.smart_card_number:form.meter_number;
-   const type=kind==="electricity"?form.meter_type:undefined;
-   if(!billersCode||!type&&kind==="electricity"){setError("Enter the required customer details first.");return;}
-   const r=await fetch("/api/vtu/verify",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({serviceID,billersCode,type})});
-   const d=await r.json();
-   if(!r.ok)throw new Error(d.error||"Could not verify the customer.");
-   if(d?.content?.WrongBillersCode===true)throw new Error("The number could not be verified by VTpass.");
-   setVerified(d.content);
-   return d.content;
-  }
-  return null;
- }
 
  async function submit(e:React.FormEvent){
   e.preventDefault();setLoading(true);setError("");
@@ -88,12 +66,7 @@ export default function RequestService(){
    if(missing)throw new Error("Please provide: "+missing.label+".");
    let orderAmount=0;let orderForm={...form};
    if(isVTU){
-    let customerVerification=verified;
-    if(kind==="electricity"||kind==="cable"){
-      if(!customerVerification) customerVerification=await verifyCustomer();
-      if(!customerVerification) throw new Error("Please verify the customer details before payment.");
-    }
-    const calculatedProviderAmount=isDStvRenew?Number(customerVerification?.Renewal_Amount||0):providerAmount;
+    const calculatedProviderAmount=providerAmount;
     if(kind==="data"||kind==="cable"){
       orderForm={...orderForm,provider_amount:String(calculatedProviderAmount),service_fee:String(serviceFee)};
     }
@@ -130,7 +103,7 @@ export default function RequestService(){
    {fields.map(f=>{if(isVTU&&["phone_number","amount"].includes(f.field_key)&&false)return null;return <label key={f.field_key} className="block text-sm font-bold">{f.label}{f.required&&<span className="text-red-500"> *</span>}{renderField(f)}</label>})}
    {isVTU&&providerAmount>0&&<div className="rounded-2xl bg-slate-50 p-4 text-sm"><div className="flex justify-between"><span>Provider amount</span><b>₦{providerAmount.toLocaleString()}</b></div><div className="mt-2 flex justify-between"><span>Service fee</span><b>₦{serviceFee.toLocaleString()}</b></div><div className="mt-3 flex justify-between border-t pt-3 text-base"><span className="font-black">Total to pay</span><b>₦{total.toLocaleString()}</b></div></div>}
    <label className="block text-sm font-bold">Request details{!fields.length&&!isVTU&&<span className="text-red-500"> *</span>}<textarea required={!fields.length&&!isVTU} value={form.request_details??""} onChange={e=>set("request_details",e.target.value)} rows={5} className="mt-2 w-full rounded-xl border border-slate-200 px-4 py-3" placeholder="Tell us anything else we should know."/></label>
-   <button disabled={loading||variationLoading} className="w-full rounded-xl bg-[#0757d5] px-5 py-3.5 font-bold text-white disabled:opacity-60">{loading?"Submitting…":isVTU&&total>0?"Continue to payment":"Submit service request"}</button>
+   <button disabled={loading} className="w-full rounded-xl bg-[#0757d5] px-5 py-3.5 font-bold text-white disabled:opacity-60">{loading?"Submitting…":isVTU&&total>0?"Continue to payment":"Submit"}</button>
   </form>
  </div></div></main>;
 }
