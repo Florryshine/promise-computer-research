@@ -49,7 +49,9 @@ export default function RequestService(){
  const total=providerAmount+serviceFee;
 
  function renderField(f:ServiceField){
-  if(isVTU&&["data-subscription","dstv-subscription","gotv-subscription","startimes-subscription"].includes(params.slug)&&["package","variation_code"].includes(f.field_key))return null;
+  // Provider IDs and provider-cost fields are internal integration data, never customer inputs.
+  const internalProviderFields=["provider_plan_id","plan_id","plan_code","variation_code","package","provider_amount","amount","network_id","cablename_id","cable_provider_id","cableplan_id","disco_id","meter_type_id","provider_id","data_plan_id"];
+  if(isVTU&&internalProviderFields.includes(f.field_key))return null;
   const value=form[f.field_key]??"";
   const common={value,onChange:(e:React.ChangeEvent<HTMLInputElement|HTMLTextAreaElement|HTMLSelectElement>)=>set(f.field_key,e.target.value),placeholder:f.placeholder??undefined};
   if(f.field_type==="textarea")return <textarea {...common} rows={5} className="mt-2 w-full rounded-xl border border-slate-200 px-4 py-3"/>;
@@ -59,7 +61,9 @@ export default function RequestService(){
 
 
  async function submit(e:React.FormEvent){
-  e.preventDefault();setLoading(true);setError("");
+  e.preventDefault();
+  if(kind==="data"){setError("Data plan checkout is temporarily paused while the live Nifex catalogue is connected. Please try again later.");return;}
+  setLoading(true);setError("");
   try{
    const supabase=createClient();const {data:{user}}=await supabase.auth.getUser();
    if(!user){router.push("/login");return;}
@@ -101,10 +105,11 @@ export default function RequestService(){
   {error&&<div className="mt-5 rounded-xl border border-red-200 bg-red-50 p-3 text-sm text-red-700">{error}</div>}
   <form onSubmit={submit} className="mt-7 space-y-5">
    {[["full_name","Full name","text"],["phone","Phone number","tel"],["email","Email","email"]].map(([k,l,t])=><label key={k} className="block text-sm font-bold">{l}<input required value={form[k]??""} onChange={e=>set(k,e.target.value)} type={t} className="mt-2 w-full rounded-xl border border-slate-200 px-4 py-3"/></label>)}
-   {fields.map(f=>{if(isVTU&&["phone_number","amount"].includes(f.field_key)&&false)return null;return <label key={f.field_key} className="block text-sm font-bold">{f.label}{f.required&&<span className="text-red-500"> *</span>}{renderField(f)}</label>})}
+   {kind==="data"&&<div className="rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900"><b>Data plans are temporarily unavailable.</b><p className="mt-1">We’re updating our live plan catalogue so you can choose a plan and see its correct price before payment. No payment will be taken for a data request until that is ready.</p></div>}
+   {fields.filter(f=>!(isVTU&&["provider_plan_id","plan_id","plan_code","variation_code","package","provider_amount","amount","network_id","cablename_id","cable_provider_id","cableplan_id","disco_id","meter_type_id","provider_id","data_plan_id"].includes(f.field_key))).map(f=><label key={f.field_key} className="block text-sm font-bold">{f.label}{f.required&&<span className="text-red-500"> *</span>}{renderField(f)}</label>)}
    {isVTU&&providerAmount>0&&<div className="rounded-2xl bg-slate-50 p-4 text-sm"><div className="flex justify-between"><span>Provider amount</span><b>₦{providerAmount.toLocaleString()}</b></div><div className="mt-2 flex justify-between"><span>Service fee</span><b>₦{serviceFee.toLocaleString()}</b></div><div className="mt-3 flex justify-between border-t pt-3 text-base"><span className="font-black">Total to pay</span><b>₦{total.toLocaleString()}</b></div></div>}
    <label className="block text-sm font-bold">Request details{!fields.length&&!isVTU&&<span className="text-red-500"> *</span>}<textarea required={!fields.length&&!isVTU} value={form.request_details??""} onChange={e=>set("request_details",e.target.value)} rows={5} className="mt-2 w-full rounded-xl border border-slate-200 px-4 py-3" placeholder="Tell us anything else we should know."/></label>
-   <button disabled={loading} className="w-full rounded-xl bg-[#0757d5] px-5 py-3.5 font-bold text-white disabled:opacity-60">{loading?"Submitting…":isVTU&&total>0?"Continue to payment":"Submit"}</button>
+   <button disabled={loading||kind==="data"} className="w-full rounded-xl bg-[#0757d5] px-5 py-3.5 font-bold text-white disabled:cursor-not-allowed disabled:opacity-60">{kind==="data"?"Data plans temporarily unavailable":loading?"Submitting…":isVTU&&total>0?"Continue to payment":"Submit"}</button>
   </form>
  </div></div></main>;
 }
