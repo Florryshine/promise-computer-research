@@ -43,7 +43,7 @@ export async function POST(request:Request){
       finalAmount=selected.price;
       verifiedFormData={...verifiedFormData,network,network_id:String(selected.networkId??""),provider_plan_id:selected.id,plan_name:selected.name,provider_amount:String(selected.price),plan_validity:selected.validity};
     }
-    if(!Number.isFinite(finalAmount)||finalAmount<=0)return NextResponse.json({error:"Invalid order amount."},{status:400});
+    if(!Number.isFinite(finalAmount)||finalAmount<0)return NextResponse.json({error:"Invalid order amount."},{status:400});
 
     const reference="PCR-"+Date.now().toString().slice(-10);
     const {data:order,error:insertError}=await admin.from("orders").insert({
