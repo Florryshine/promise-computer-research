@@ -36,18 +36,9 @@ export async function POST(request: Request) {
 
     if (!payment) return NextResponse.json({ received: true });
 
-    // Idempotency: Paystack can retry webhooks and the browser callback can
-    // verify the same transaction. A payment already claimed as paid must not
-    // trigger fulfillment again.
-    if (payment.status === 'paid') {
-      try {
-        const fulfillment = await fulfillOrder(payment.order_id);
-        console.log('Provider fulfillment after already-paid webhook:', fulfillment);
-      } catch (error) {
-        console.error('Provider fulfillment failed after already-paid webhook:', error);
-      }
-      return NextResponse.json({ received: true });
-    }
+    // A duplicate webhook must not re-send an already fulfilled VTU purchase.
+    // If payment was marked paid by the browser callback, the callback handles fulfillment.
+    if (payment.status === 'paid') return NextResponse.json({ received: true });
 
     const currency = String(data.currency || 'NGN').toUpperCase();
     const amountCheck = checkPaystackAmount(data, Number(payment.amount));
