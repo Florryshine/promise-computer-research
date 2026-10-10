@@ -28,11 +28,11 @@ values
 ('final-year-project','Final Year Project','Academic Support','Final year project support. Contact us on WhatsApp for requirements and pricing.','request',null,true,22),
 ('transcript-certificate','Transcript & Certificate Processing','Documents','Transcript and certificate processing. Contact us on WhatsApp for requirements and pricing.','request',null,true,23),
 ('nerd-registration','NERD Registration','School Services','NERD registration service.','request',null,false,24),
-('dstv-subscription','DStv Subscription','Subscriptions','Manual DStv subscription processing. Enter your details and package plan; service charge is ₦1,000.','fixed',1000,true,25),
-('gotv-subscription','GOtv Subscription','Subscriptions','Manual GOtv subscription processing. Enter your details and package plan; service charge is ₦1,000.','fixed',1000,true,26),
-('startimes-subscription','StarTimes Subscription','Subscriptions','Manual StarTimes subscription processing. Enter your details and package plan; service charge is ₦1,000.','fixed',1000,true,27),
-('electricity-bill','Electricity Bill / Units','Utilities','Manual electricity bill service. Enter the units you want and the amount; service charge is ₦500.','fixed',500,true,28),
-('airtime-recharge','Airtime Recharge','Utilities','Airtime recharge processed manually. Final service charge and payment amount will be confirmed before processing.','request',null,true,29)
+('dstv-subscription','DStv Subscription','Subscriptions','Pay for your DStv package; service fee is ₦1,000.','fixed',1000,true,25),
+('gotv-subscription','GOtv Subscription','Subscriptions','Pay for your GOtv package; service fee is ₦1,000.','fixed',1000,true,26),
+('startimes-subscription','StarTimes Subscription','Subscriptions','Pay for your StarTimes package; service fee is ₦1,000.','fixed',1000,true,27),
+('electricity-bill','Electricity Bill / Units','Utilities','Buy electricity units for a supported meter; service fee is ₦500.','fixed',500,true,28),
+('airtime-recharge','Airtime Recharge','Utilities','Recharge MTN, Airtel, Glo or 9mobile.','request',null,true,29)
 on conflict (slug) do update set
 title=excluded.title, category=excluded.category, description=excluded.description,
 price_type=excluded.price_type, price=excluded.price, active=excluded.active, sort_order=excluded.sort_order, updated_at=now();
