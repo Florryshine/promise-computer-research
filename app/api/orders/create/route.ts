@@ -13,6 +13,12 @@ export async function POST(request:Request){
     const customerNote=String(body.customer_note||"").trim();
     if(!slug)return NextResponse.json({error:"Service is required."},{status:400});
 
+    // Never accept customer-supplied plan IDs/prices for data until the live
+    // Nifex catalogue is integrated and the selected plan can be verified server-side.
+    if(slug==="data-subscription"){
+      return NextResponse.json({error:"Data plan checkout is temporarily unavailable while the live Nifex catalogue is connected."},{status:503});
+    }
+
     const supabase=await createClient();
     const {data:{user}}=await supabase.auth.getUser();
     if(!user)return NextResponse.json({error:"You must be logged in."},{status:401});
