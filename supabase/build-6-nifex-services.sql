@@ -38,7 +38,7 @@ where service_id in (select id from public.services where slug in
 insert into public.service_fields (service_id,field_key,label,field_type,placeholder,required,options,sort_order)
 select s.id, f.field_key, f.label, f.field_type, f.placeholder, f.required, f.options::jsonb, f.sort_order
 from public.services s
-cross join lateral (values
+join lateral (values
  ('airtime-recharge','network','Network','select',null,true,'[{"label":"MTN","value":"MTN"},{"label":"Airtel","value":"Airtel"},{"label":"Glo","value":"Glo"},{"label":"9mobile","value":"9mobile"}]',1),
  ('airtime-recharge','mobile_number','Phone number','tel','08012345678',true,null,2),
  ('airtime-recharge','amount','Airtime amount (₦)','number','100',true,null,3),
