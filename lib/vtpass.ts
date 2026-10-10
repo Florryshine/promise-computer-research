@@ -11,15 +11,32 @@ export function vtpassConfigured() { return Boolean(API_KEY && BASE_URL); }
 function providerId(value: unknown, envName: string): number | null {
   const raw = clean(value);
   if (/^\d+$/.test(raw)) return Number(raw);
+
+  // Nifex documents these network IDs directly. Keep them built in so airtime
+  // and data orders do not require manual Vercel mapping for the four networks.
+  const defaults: Record<string, Record<string, number>> = {
+    NIFEX_NETWORK_IDS: {
+      mtn: 1,
+      glo: 2,
+      '9mobile': 3,
+      etisalat: 3,
+      airtel: 4
+    }
+  };
+
+  // Explicit environment configuration can override built-in mappings.
   const configured = process.env[envName];
-  if (!configured) return null;
-  try {
-    const map = JSON.parse(configured) as Record<string, unknown>;
-    const id = map[raw] ?? map[raw.toLowerCase()] ?? map[raw.toUpperCase()];
-    if (typeof id === 'number' && Number.isInteger(id)) return id;
-    if (typeof id === 'string' && /^\d+$/.test(id)) return Number(id);
-  } catch {}
-  return null;
+  if (configured) {
+    try {
+      const map = JSON.parse(configured) as Record<string, unknown>;
+      const id = map[raw] ?? map[raw.toLowerCase()] ?? map[raw.toUpperCase()];
+      if (typeof id === 'number' && Number.isInteger(id)) return id;
+      if (typeof id === 'string' && /^\d+$/.test(id)) return Number(id);
+    } catch {}
+  }
+
+  const fallback = defaults[envName]?.[raw.toLowerCase()];
+  return Number.isInteger(fallback) ? fallback : null;
 }
 
 async function request(path: string, method: 'GET' | 'POST', params: Record<string, unknown> = {}) {
