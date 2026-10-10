@@ -38,7 +38,27 @@ export async function POST(request: Request) {
       }
     } catch {}
 
-    if (payment.status === 'paid') return NextResponse.json({ paid: true, code: 'already_paid', message: 'Payment verified successfully.' });
+    if (payment.status === 'paid') {
+      // Payment may already have been recorded by the webhook. Still ensure
+      // provider fulfillment is attempted; fulfillment is idempotent by order reference.
+      try {
+        const fulfillment = await fulfillOrder(payment.order_id);
+        return NextResponse.json({
+          paid: true,
+          code: 'already_paid',
+          message: 'Payment verified. Fulfillment status: ' + fulfillment.status + '.',
+          fulfillment
+        });
+      } catch (error) {
+        console.error('Provider fulfillment failed for already-paid payment:', error);
+        return NextResponse.json({
+          paid: true,
+          code: 'already_paid_fulfillment_error',
+          message: 'Payment is confirmed, but the service provider could not be contacted.',
+          cause: error instanceof Error ? error.message : 'Unknown fulfillment error'
+        });
+      }
+    }
 
     const response = await fetch('https://api.paystack.co/transaction/verify/' + encodeURIComponent(reference), { headers: { Authorization: `Bearer ${secret}` }, cache: 'no-store' });
     let result: any;
@@ -61,9 +81,19 @@ export async function POST(request: Request) {
     const { error: orderUpdateError } = await admin.from('orders').update({ payment_status: 'paid', status: 'processing' }).eq('id', payment.order_id);
     if (orderUpdateError) return NextResponse.json({ paid: true, code: 'order_update_failed', message: 'Payment verified and recorded, but the order status could not be updated.', cause: orderUpdateError.message });
 
+    // The browser callback can be the first confirmation path when the webhook
+    // is delayed or unavailable. Start VTU fulfillment here as well.
+    let fulfillment: any;
+    try {
+      fulfillment = await fulfillOrder(payment.order_id);
+    } catch (error) {
+      console.error('Provider fulfillment failed after payment verification:', error);
+      fulfillment = { status: 'failed', message: error instanceof Error ? error.message : 'Unknown fulfillment error' };
+    }
+
     const { data: orderOwner } = await admin.from('orders').select('customer_id,reference').eq('id', payment.order_id).maybeSingle();
-    if (orderOwner?.customer_id) await admin.from('notifications').insert({ user_id: orderOwner.customer_id, title: 'Payment confirmed', message: 'Payment for order ' + orderOwner.reference + ' has been confirmed. Your order is now being processed.' });
-    return NextResponse.json({ paid: true, code: 'verified', message: 'Payment verified successfully.' });
+    if (orderOwner?.customer_id) await admin.from('notifications').insert({ user_id: orderOwner.customer_id, title: 'Payment confirmed', message: 'Payment for order ' + orderOwner.reference + ' has been confirmed. Provider fulfillment status: ' + fulfillment?.status + '.' });
+    return NextResponse.json({ paid: true, code: 'verified', message: 'Payment verified successfully. Fulfillment status: ' + fulfillment?.status + '.', fulfillment });
   } catch (error) {
     console.error('Paystack verification unexpected error:', error);
     return NextResponse.json({ paid: false, code: 'unexpected_error', message: 'Unexpected verification error.', cause: error instanceof Error ? error.message : 'Unknown error' }, { status: 500 });
