@@ -27,8 +27,8 @@ export default function VTUTelecomHealth() {
     <section className="rounded-3xl bg-white p-5 shadow-sm sm:p-7">
       <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
         <div>
-          <h2 className="text-xl font-black">VTUTelecom Connection</h2>
-          <p className="mt-1 text-sm text-slate-500">Test whether the deployed server can reach VTUTelecom using the configured API credentials.</p>
+          <h2 className="text-xl font-black">Nifex Data Connection</h2>
+          <p className="mt-1 text-sm text-slate-500">Test whether the deployed server can reach Nifex Data using the configured API credentials.</p>
         </div>
         <button onClick={testConnection} disabled={loading} className="rounded-xl bg-[#0757d5] px-4 py-2.5 text-sm font-bold text-white disabled:opacity-60">
           {loading ? 'Testing…' : 'Test Connection'}
@@ -50,7 +50,7 @@ export default function VTUTelecomHealth() {
       )}
 
       {failed && !result.providerError && (
-        <p className="mt-4 text-sm font-semibold text-red-700">VTUTelecom could not be reached.</p>
+        <p className="mt-4 text-sm font-semibold text-red-700">Nifex Data could not be reached.</p>
       )}
     </section>
   );
