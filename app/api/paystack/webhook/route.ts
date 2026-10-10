@@ -36,9 +36,23 @@ export async function POST(request: Request) {
 
     if (!payment) return NextResponse.json({ received: true });
 
-    // A duplicate webhook must not re-send an already fulfilled VTU purchase.
-    // If payment was marked paid by the browser callback, the callback handles fulfillment.
-    if (payment.status === 'paid') return NextResponse.json({ received: true });
+    // A paid payment may have been recorded by the browser callback before this webhook arrived.
+    // Re-enter the idempotent fulfillment flow so a missed callback cannot strand a paid order.
+    // fulfillOrder uses the order-derived Nifex request ID and checks recorded provider transactions.
+    if (payment.status === 'paid') {
+      try {
+        await fulfillOrder(payment.order_id);
+      } catch (error) {
+        const message = error instanceof Error ? error.message : 'Unknown fulfillment error';
+        console.error('Nifex fulfillment retry from duplicate webhook failed:', message);
+        const { error: updateError } = await supabase.from('orders').update({
+          status: 'needs_information',
+          admin_note: 'Payment received, but automatic Nifex fulfillment encountered an unexpected error: ' + message.slice(0, 500)
+        }).eq('id', payment.order_id);
+        if (updateError) console.error('Could not record Nifex fulfillment error:', updateError.message);
+      }
+      return NextResponse.json({ received: true });
+    }
 
     const currency = String(data.currency || 'NGN').toUpperCase();
     const amountCheck = checkPaystackAmount(data, Number(payment.amount));
