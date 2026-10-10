@@ -73,7 +73,16 @@ export async function POST(request: Request) {
     try {
       await fulfillOrder(payment.order_id);
     } catch (error) {
-      console.error('VTpass fulfillment failed:', error);
+      const message = error instanceof Error ? error.message : 'Unknown fulfillment error';
+      console.error('Nifex fulfillment failed:', message);
+      // Keep the payment recorded as paid, but never leave the order silently stuck in processing.
+      const { error: fulfillmentUpdateError } = await supabase.from('orders').update({
+        status: 'needs_information',
+        admin_note: 'Payment received, but automatic Nifex fulfillment encountered an unexpected error: ' + message.slice(0, 500)
+      }).eq('id', payment.order_id);
+      if (fulfillmentUpdateError) {
+        console.error('Could not record Nifex fulfillment error on order:', fulfillmentUpdateError.message);
+      }
     }
 
     const { data: orderOwner } = await supabase
