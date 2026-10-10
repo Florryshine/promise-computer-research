@@ -1,7 +1,7 @@
 import crypto from 'crypto';
 import { createAdminClient } from '@/lib/supabase/admin';
 
-const BASE_URL = (process.env.NIFEX_BASE_URL || process.env.VTUTELECOM_BASE_URL || 'https://nifexdataapp.com.ng/api/').replace(/\/+$/, '') + '/';
+const BASE_URL = (process.env.NIFEX_BASE_URL || 'https://nifexdataapp.com.ng/api/').replace(/\/+$/, '') + '/';
 const API_KEY = (process.env.NIFEX_API_KEY || process.env.VTUTELECOM_API_KEY || '').trim();
 
 function clean(v: unknown) { return String(v ?? '').trim(); }
