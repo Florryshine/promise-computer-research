@@ -174,9 +174,9 @@ export async function fulfillOrder(orderId: string) {
         network: p.network, mobile_number: p.phone, plan: p.plan, portion_ref: rid
       });
     } else if (p.kind === 'exam') {
-      result = await request('/exam/', 'POST', { provider: p.provider, quantity: p.quantity, portion_ref: rid });
+      result = await request('/exam/', 'POST', { provider: p.provider, quantity: p.quantity });
     } else if (p.kind === 'datapin') {
-      result = await request('/datapin/', 'POST', { network: p.network, data_plan: p.plan, quantity: p.quantity, portion_ref: rid });
+      result = await request('/datapin/', 'POST', { network: p.network, data_plan: p.plan, quantity: p.quantity });
     } else if (p.kind === 'cable') {
       const verified = await request('/cabletv/verify/', 'GET', { cablename: p.cable, smart_card_number: p.smartCard });
       if (failed(verified) || !verified?.name) throw new Error('Nifex did not confirm the cable TV customer. Check the response before retrying.');
