@@ -14,7 +14,7 @@ export async function GET() {
       return NextResponse.json({ ok: false, error: 'Admin access required.' }, { status: 403 });
     }
 
-    const baseUrl = (process.env.NIFEX_BASE_URL || process.env.VTUTELECOM_BASE_URL || 'https://nifexdataapp.com.ng/api/').replace(/\/+$/, '') + '/';
+    const baseUrl = (process.env.NIFEX_BASE_URL || 'https://nifexdataapp.com.ng/api/').replace(/\/+$/, '') + '/';
     const apiKey = (process.env.NIFEX_API_KEY || process.env.VTUTELECOM_API_KEY || '').trim();
     const result: Record<string, unknown> = {
       ok: true,
