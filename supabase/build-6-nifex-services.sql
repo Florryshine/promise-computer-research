@@ -49,31 +49,31 @@ cross join lateral (values
  ('data-subscription','plan','Nifex data plan ID','number','Enter plan ID from Nifex',true,null,3),
  ('data-subscription','provider_amount','Data plan price (₦)','number','Enter the plan price',true,null,4),
 
- ('dstv-subscription','cablename','Nifex cable provider ID','number','Enter provider ID',true,null,1),
+ ('dstv-subscription','cablename','TV provider','select',null,true,'[{"label":"DStv","value":"dstv"}]',1),
  ('dstv-subscription','smart_card_number','Smartcard number','text','Enter smartcard number',true,null,2),
  ('dstv-subscription','cableplan','Nifex package ID','number','Enter package ID',true,null,3),
  ('dstv-subscription','provider_amount','Package price (₦)','number','Enter package price',true,null,4),
 
- ('gotv-subscription','cablename','Nifex cable provider ID','number','Enter provider ID',true,null,1),
+ ('gotv-subscription','cablename','TV provider','select',null,true,'[{"label":"GOtv","value":"gotv"}]',1),
  ('gotv-subscription','smart_card_number','Smartcard number','text','Enter smartcard number',true,null,2),
  ('gotv-subscription','cableplan','Nifex package ID','number','Enter package ID',true,null,3),
  ('gotv-subscription','provider_amount','Package price (₦)','number','Enter package price',true,null,4),
 
- ('startimes-subscription','cablename','Nifex cable provider ID','number','Enter provider ID',true,null,1),
+ ('startimes-subscription','cablename','TV provider','select',null,true,'[{"label":"StarTimes","value":"startimes"}]',1),
  ('startimes-subscription','smart_card_number','Smartcard number','text','Enter smartcard number',true,null,2),
  ('startimes-subscription','cableplan','Nifex package ID','number','Enter package ID',true,null,3),
  ('startimes-subscription','provider_amount','Package price (₦)','number','Enter package price',true,null,4),
 
- ('electricity-bill','disco','Nifex electricity provider ID','number','Enter provider ID',true,null,1),
+ ('electricity-bill','disco','Electricity provider','select',null,true,'[{"label":"Ikeja Electric","value":"ikeja-electric"},{"label":"Eko Electric","value":"eko-electric"},{"label":"Abuja Electric","value":"abuja-electric"},{"label":"Kano Electric","value":"kano-electric"},{"label":"Ibadan Electric","value":"ibadan-electric"},{"label":"Enugu Electric","value":"enugu-electric"},{"label":"Port Harcourt Electric","value":"portharcourt-electric"},{"label":"Benin Electric","value":"benin-electric"},{"label":"Jos Electric","value":"jos-electric"},{"label":"Kaduna Electric","value":"kaduna-electric"}]',1),
  ('electricity-bill','meter_number','Meter number','text','Enter meter number',true,null,2),
- ('electricity-bill','meter_type','Meter type ID','number','Enter meter type ID',true,null,3),
+ ('electricity-bill','meter_type','Meter type','select',null,true,'[{"label":"Prepaid","value":"prepaid"},{"label":"Postpaid","value":"postpaid"}]',3),
  ('electricity-bill','amount','Amount (₦)','number','2000',true,null,4),
 
- ('exam-pins','provider','Exam provider ID','number','Enter provider ID from Nifex',true,null,1),
+ ('exam-pins','provider','Exam provider','select',null,true,'[{"label":"WAEC","value":"WAEC"},{"label":"NECO","value":"NECO"},{"label":"NABTEB","value":"NABTEB"}]',1),
  ('exam-pins','quantity','Quantity','number','1',true,null,2),
  ('exam-pins','amount','Total price (₦)','number','Enter total price',true,null,3),
 
- ('data-pins','network','Network ID','number','Enter network ID from Nifex',true,null,1),
+ ('data-pins','network','Network','select',null,true,'[{"label":"MTN","value":"MTN"},{"label":"Airtel","value":"Airtel"},{"label":"Glo","value":"Glo"},{"label":"9mobile","value":"9mobile"}]',1),
  ('data-pins','data_plan','Data pin plan ID','number','Enter plan ID from Nifex',true,null,2),
  ('data-pins','quantity','Quantity','number','1',true,null,3),
  ('data-pins','amount','Total price (₦)','number','Enter total price',true,null,4)
