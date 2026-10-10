@@ -6,7 +6,7 @@ import {createClient} from "@/lib/supabase/client";
 
 type ServiceField={field_key:string;label:string;field_type:string;placeholder:string|null;required:boolean;options:any;sort_order:number};
 
-const VTU_SLUGS=new Set(["airtime-recharge","data-subscription","dstv-subscription","gotv-subscription","startimes-subscription","electricity-bill"]);
+const VTU_SLUGS=new Set(["airtime-recharge","data-subscription","dstv-subscription","gotv-subscription","startimes-subscription","electricity-bill","exam-pins","data-pins"]);
 const NETWORK_SERVICE=(network:string,type:"airtime"|"data")=>{
  const n=network.toLowerCase();
  if(n==="mtn")return type==="airtime"?"mtn":"mtn-data";
@@ -15,7 +15,7 @@ const NETWORK_SERVICE=(network:string,type:"airtime"|"data")=>{
  if(n==="9mobile")return type==="airtime"?"etisalat":"etisalat-data";
  return "";
 };
-const FEE:Record<string,number>={airtime:0,data:0,dstv:1000,electricity:500};
+const FEE:Record<string,number>={airtime:0,data:0,dstv:1000,electricity:500,exam:0,datapin:0};
 
 export default function RequestService(){
  const params=useParams<{slug:string}>(),router=useRouter();
@@ -23,7 +23,7 @@ export default function RequestService(){
  const [variations,setVariations]=useState<any[]>([]),[loading,setLoading]=useState(false),[pageLoading,setPageLoading]=useState(true),[variationLoading,setVariationLoading]=useState(false),[error,setError]=useState(""),[verified,setVerified]=useState<any>(null);
 
  const isVTU=VTU_SLUGS.has(params.slug);
- const kind=params.slug==="airtime-recharge"?"airtime":params.slug==="data-subscription"?"data":params.slug==="dstv-subscription"?"dstv":params.slug==="electricity-bill"?"electricity":"";
+ const kind=params.slug==="airtime-recharge"?"airtime":params.slug==="data-subscription"?"data":params.slug==="dstv-subscription"?"dstv":params.slug==="electricity-bill"?"electricity":params.slug==="exam-pins"?"exam":params.slug==="data-pins"?"datapin":"";
  const set=(k:string,v:string)=>setForm(x=>({...x,[k]:v}));
 
  useEffect(()=>{(async()=>{
@@ -49,7 +49,7 @@ export default function RequestService(){
 
  const selectedVariation=useMemo(()=>variations.find(v=>String(v.variation_code)===String(form.variation_code)),[variations,form.variation_code]);
  const isDStvRenew=kind==="dstv"&&form.subscription_type==="renew";
- const providerAmount=kind==="airtime"||kind==="electricity"?Number(form.amount||0):isDStvRenew?Number(verified?.Renewal_Amount||0):Number(selectedVariation?.variation_amount||form.provider_amount||0);
+ const providerAmount=["airtime","electricity","exam","datapin"].includes(kind)?Number(form.amount||0):isDStvRenew?Number(verified?.Renewal_Amount||0):Number(selectedVariation?.variation_amount||form.provider_amount||0);
  const serviceFee=FEE[kind]||0;
  const total=providerAmount+serviceFee;
 
@@ -106,7 +106,7 @@ export default function RequestService(){
       if(kind==="dstv"&&isDStvRenew&&!calculatedProviderAmount)throw new Error("VTpass did not return a renewal amount for this smartcard.");
       orderForm={...orderForm,provider_amount:String(calculatedProviderAmount),service_fee:String(serviceFee)};
     }
-    if(kind==="airtime"||kind==="electricity"){
+    if(["airtime","electricity","exam","datapin"].includes(kind)){
       if(!Number.isFinite(providerAmount)||providerAmount<=0)throw new Error("Enter a valid amount.");
       orderForm={...orderForm,provider_amount:String(calculatedProviderAmount),service_fee:String(serviceFee)};
     }
@@ -132,7 +132,7 @@ export default function RequestService(){
 
  return <main className="section bg-slate-50"><div className="container"><div className="mx-auto max-w-2xl rounded-3xl bg-white p-6 shadow-soft sm:p-8">
   <p className="text-xs font-bold uppercase tracking-[.16em] text-[#0757d5]">Service request</p><h1 className="mt-2 text-3xl font-black">{service.title}</h1>
-  <p className="mt-2 text-sm text-slate-500">{isVTU?"Select your live provider plan/details. Payment is made securely through Paystack and the service is processed automatically.":service.price_type==="fixed"&&service.price!=null?"Price: ₦"+Number(service.price).toLocaleString()+".":"Submit your details and we will review the request."}</p>
+  <p className="mt-2 text-sm text-slate-500">{isVTU?"Enter your details and continue to payment.":service.price_type==="fixed"&&service.price!=null?"Price: ₦"+Number(service.price).toLocaleString()+".":"Submit your details."}</p>
   {error&&<div className="mt-5 rounded-xl border border-red-200 bg-red-50 p-3 text-sm text-red-700">{error}</div>}
   <form onSubmit={submit} className="mt-7 space-y-5">
    {[["full_name","Full name","text"],["phone","Phone number","tel"],["email","Email","email"]].map(([k,l,t])=><label key={k} className="block text-sm font-bold">{l}<input required value={form[k]??""} onChange={e=>set(k,e.target.value)} type={t} className="mt-2 w-full rounded-xl border border-slate-200 px-4 py-3"/></label>)}
