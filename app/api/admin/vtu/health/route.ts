@@ -1,6 +1,5 @@
 import { NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
-import { vtpassConfigured } from '@/lib/vtpass';
 
 export const dynamic = 'force-dynamic';
 
@@ -15,44 +14,34 @@ export async function GET() {
       return NextResponse.json({ ok: false, error: 'Admin access required.' }, { status: 403 });
     }
 
-    const baseUrl = (process.env.VTUTELECOM_BASE_URL || 'https://vtutelecom.ng/api').replace(/\/$/, '');
-    const apiKey = process.env.VTUTELECOM_API_KEY?.trim();
-
+    const baseUrl = (process.env.NIFEX_BASE_URL || process.env.VTUTELECOM_BASE_URL || 'https://nifexdataapp.com.ng/api/').replace(/\/+$/, '') + '/';
+    const apiKey = (process.env.NIFEX_API_KEY || process.env.VTUTELECOM_API_KEY || '').trim();
     const result: Record<string, unknown> = {
       ok: true,
-      configured: Boolean(apiKey && baseUrl),
+      configured: Boolean(apiKey),
+      provider: 'Nifex Data',
       baseUrl,
-      sandbox: baseUrl.includes('sandbox'),
-      endpoint: baseUrl + '/user/',
+      endpoint: baseUrl + 'user/',
     };
-
     if (!apiKey) {
-      return NextResponse.json({ ...result, providerReachable: false, providerError: 'VTUTelecom API key is missing.' }, { status: 200 });
+      return NextResponse.json({ ...result, providerReachable: false, providerError: 'Nifex API key is missing. Set NIFEX_API_KEY in Vercel.' }, { status: 200 });
     }
 
     const controller = new AbortController();
     const timeout = setTimeout(() => controller.abort(), 10000);
-
     try {
-      const response = await fetch(baseUrl + '/user/', {
+      const response = await fetch(baseUrl + 'user/', {
         method: 'GET',
-        headers: {
-          Authorization: 'Token ' + apiKey,
-          'Content-Type': 'application/json',
-        },
+        headers: { Authorization: 'Token ' + apiKey, 'Content-Type': 'application/json', Accept: 'application/json' },
         cache: 'no-store',
         signal: controller.signal,
       });
-
       const raw = await response.text();
-      let body: unknown = raw;
-      try {
-        body = raw ? JSON.parse(raw) : {};
-      } catch {}
-
+      let body: any = raw;
+      try { body = raw ? JSON.parse(raw) : {}; } catch {}
       result.providerReachable = true;
       result.httpStatus = response.status;
-      result.providerOk = response.ok;
+      result.providerOk = response.ok && String(body?.status || '').toLowerCase() === 'success';
       result.providerResponse = body;
     } catch (error) {
       result.providerReachable = false;
@@ -61,12 +50,8 @@ export async function GET() {
     } finally {
       clearTimeout(timeout);
     }
-
     return NextResponse.json(result, { status: 200 });
   } catch (error) {
-    return NextResponse.json({
-      ok: false,
-      error: error instanceof Error ? error.message : 'VTUTelecom connection check failed.'
-    }, { status: 500 });
+    return NextResponse.json({ ok: false, error: error instanceof Error ? error.message : 'Nifex connection check failed.' }, { status: 500 });
   }
 }
