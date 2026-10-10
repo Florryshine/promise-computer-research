@@ -176,11 +176,11 @@ on conflict (slug) do nothing;
 insert into storage.buckets (id,name,public) values ('order-documents','order-documents',false)
 on conflict (id) do nothing;
 
--- Build 3: automated VTpass fulfillment tracking
+-- Build 3: automated Nifex fulfillment tracking
 create table if not exists public.provider_transactions (
   id uuid primary key default gen_random_uuid(),
   order_id uuid not null references public.orders(id) on delete cascade,
-  provider text not null default 'vtpass',
+  provider text not null default 'nifex',
   request_id text unique not null,
   service_id text not null,
   provider_reference text,
