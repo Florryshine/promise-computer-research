@@ -74,6 +74,15 @@ function normalize(order: any) {
     plan: providerId(f.provider_plan_id ?? f.plan_id ?? f.plan ?? f.variation_code ?? f.plan_code, 'NIFEX_DATA_PLAN_IDS'),
     amount
   };
+  if (slug === 'exam-pins') return {
+    kind: 'exam', provider: providerId(f.provider_id ?? f.provider, 'NIFEX_EXAM_PROVIDER_IDS'),
+    quantity: Math.max(1, Math.floor(Number(f.quantity || 1))), amount
+  };
+  if (slug === 'data-pins') return {
+    kind: 'datapin', network: providerId(f.network_id ?? f.network, 'NIFEX_NETWORK_IDS'),
+    plan: providerId(f.data_plan_id ?? f.data_plan ?? f.plan_id ?? f.plan, 'NIFEX_DATAPIN_PLAN_IDS'),
+    quantity: Math.max(1, Math.floor(Number(f.quantity || 1))), amount
+  };
   if (['dstv-subscription', 'gotv-subscription', 'startimes-subscription'].includes(slug)) return {
     kind: 'cable',
     cable: providerId(f.cablename_id ?? f.cablename ?? f.cable_provider_id ?? f.serviceID ?? (slug === 'dstv-subscription' ? 'dstv' : slug === 'gotv-subscription' ? 'gotv' : 'startimes'), 'NIFEX_CABLE_IDS'),
@@ -127,6 +136,8 @@ export async function fulfillOrder(orderId: string) {
     p.kind === 'airtime' && p.network == null ? 'Nifex network ID is missing. Configure NIFEX_NETWORK_IDS in Vercel.' :
     ['airtime', 'data'].includes(p.kind) && !p.phone ? 'Mobile number is missing.' :
     p.kind === 'data' && (p.network == null || p.plan == null) ? 'Nifex data network/plan ID is missing. Configure NIFEX_NETWORK_IDS and NIFEX_DATA_PLAN_IDS.' :
+    p.kind === 'exam' && p.provider == null ? 'Nifex exam provider ID is missing. Configure NIFEX_EXAM_PROVIDER_IDS.' :
+    p.kind === 'datapin' && (p.network == null || p.plan == null) ? 'Nifex data-pin network/plan ID is missing. Configure NIFEX_NETWORK_IDS and NIFEX_DATAPIN_PLAN_IDS.' :
     p.kind === 'cable' && (p.cable == null || p.plan == null || !p.smartCard) ? 'Nifex cable provider ID, plan ID or smart card number is missing. Configure NIFEX_CABLE_IDS and NIFEX_CABLE_PLAN_IDS.' :
     p.kind === 'electricity' && (p.disco == null || p.meterType == null || !p.meterNumber) ? 'Nifex electricity provider ID, meter type ID or meter number is missing. Configure NIFEX_ELECTRICITY_IDS and NIFEX_METER_TYPE_IDS.' : '';
   if (problem) return markNeedsAttention(admin, order, problem);
@@ -162,6 +173,10 @@ export async function fulfillOrder(orderId: string) {
       result = await request('/data/', 'POST', {
         network: p.network, mobile_number: p.phone, plan: p.plan, portion_ref: rid
       });
+    } else if (p.kind === 'exam') {
+      result = await request('/exam/', 'POST', { provider: p.provider, quantity: p.quantity, portion_ref: rid });
+    } else if (p.kind === 'datapin') {
+      result = await request('/datapin/', 'POST', { network: p.network, data_plan: p.plan, quantity: p.quantity, portion_ref: rid });
     } else if (p.kind === 'cable') {
       const verified = await request('/cabletv/verify/', 'GET', { cablename: p.cable, smart_card_number: p.smartCard });
       if (failed(verified) || !verified?.name) throw new Error('Nifex did not confirm the cable TV customer. Check the response before retrying.');
