@@ -20,7 +20,12 @@ function networkId(value: unknown): number | null {
   const v = text(value).toLowerCase();
   if (/^\d+$/.test(v)) return Number(v);
   const ids: Record<string, number> = { mtn: 1, glo: 2, "9mobile": 3, etisalat: 3, airtel: 4 };
-  return ids[v] ?? null;
+  if (ids[v] != null) return ids[v];
+  if (v.includes("9mobile") || v.includes("etisalat")) return 3;
+  if (v.includes("mtn")) return 1;
+  if (v.includes("airtel")) return 4;
+  if (v.includes("glo")) return 2;
+  return null;
 }
 function networkName(id: number | null, label: unknown): string {
   const supplied = text(label);
@@ -73,5 +78,5 @@ export async function getNifexDataPlans(network?: string): Promise<NifexDataPlan
   }).filter((plan: NifexDataPlan | null): plan is NifexDataPlan => Boolean(plan));
   if (!plans.length) throw new Error("Nifex catalogue records did not include plan IDs, names and prices.");
   const wantedId = networkId(network);
-  return wantedId == null ? plans : plans.filter(plan => plan.networkId === wantedId || plan.network.toLowerCase() === text(network).toLowerCase());
+  return wantedId == null ? plans : plans.filter(plan => plan.networkId === wantedId || networkId(plan.network) === wantedId);
 }
