@@ -16,12 +16,37 @@ export async function GET() {
 
     const baseUrl = (process.env.NIFEX_BASE_URL || 'https://nifexdataapp.com.ng/api/').replace(/\/+$/, '') + '/';
     const apiKey = (process.env.NIFEX_API_KEY || process.env.VTUTELECOM_API_KEY || '').trim();
+    const mappingNames = [
+      'NIFEX_NETWORK_IDS',
+      'NIFEX_DATA_PLAN_IDS',
+      'NIFEX_CABLE_IDS',
+      'NIFEX_CABLE_PLAN_IDS',
+      'NIFEX_ELECTRICITY_IDS',
+      'NIFEX_METER_TYPE_IDS',
+      'NIFEX_EXAM_PROVIDER_IDS',
+      'NIFEX_DATAPIN_PLAN_IDS',
+    ];
+    const mappings: Record<string, { configured: boolean; validJson: boolean; entryCount: number }> = {};
+    for (const name of mappingNames) {
+      const raw = process.env[name]?.trim() || '';
+      let validJson = false;
+      let entryCount = 0;
+      if (raw) {
+        try {
+          const parsed = JSON.parse(raw);
+          validJson = Boolean(parsed && typeof parsed === 'object' && !Array.isArray(parsed));
+          entryCount = validJson ? Object.keys(parsed).length : 0;
+        } catch {}
+      }
+      mappings[name] = { configured: raw.length > 0, validJson, entryCount };
+    }
     const result: Record<string, unknown> = {
       ok: true,
       configured: Boolean(apiKey),
       provider: 'Nifex Data',
       baseUrl,
       endpoint: baseUrl + 'user/',
+      mappings,
     };
     if (!apiKey) {
       return NextResponse.json({ ...result, providerReachable: false, providerError: 'Nifex API key is missing. Set NIFEX_API_KEY in Vercel.' }, { status: 200 });
