@@ -27,8 +27,18 @@ export default function RequestService(){
    supabase.from("profiles").select("full_name,phone").eq("id",user.id).maybeSingle()
   ]);
   const {data:f}=s?await supabase.from("service_fields").select("field_key,label,field_type,placeholder,required,options,sort_order").eq("service_id",s.id).order("sort_order"):{data:[]};
-  setService(s);setFields((f??[]) as ServiceField[]);
-  setForm({full_name:p?.full_name??"",phone:p?.phone??"",email:user.email??"",phone_number:p?.phone??"",request_details:""});
+  const loadedFields=(f??[]) as ServiceField[];
+  setService(s);setFields(loadedFields);
+  // Automatically choose fields with only one valid option (for example, Airtime type = VTU).
+  // This avoids asking customers to select an option when there is no actual choice.
+  const singleOptionDefaults:Record<string,string>={};
+  for(const field of loadedFields){
+    if(field.field_type==="select" && Array.isArray(field.options) && field.options.length===1){
+      const option=field.options[0];
+      singleOptionDefaults[field.field_key]=String(option?.value??option);
+    }
+  }
+  setForm({full_name:p?.full_name??"",phone:p?.phone??"",email:user.email??"",phone_number:p?.phone??"",request_details:"",...singleOptionDefaults});
   setPageLoading(false);
  })();},[params.slug,router]);
 
