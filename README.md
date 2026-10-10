@@ -37,3 +37,14 @@ Those belong to Build 3/4.
 
 ## Important
 The SQL schema uses customer-only RLS policies. Admin policies and admin UI are intentionally reserved for the next build. Do not disable RLS in production.
+
+## Nifex live data-plan catalogue
+
+The data request form uses the server route `/api/nifex/data-plans` and validates the selected plan and price again on the server before creating a paid order.
+
+Required Vercel environment variables:
+- `NIFEX_API_KEY` — Nifex API token (server-side only).
+- `NIFEX_DATA_PLANS_PATH` — the exact relative GET path for listing active data plans, confirmed by Nifex support. Do not guess this path.
+- `NIFEX_BASE_URL` — optional; defaults to `https://nifexdataapp.com.ng/api/`.
+
+The API documentation supplied for this project documents `POST /data/` but does not document a data-plan listing endpoint. Until Nifex confirms the catalogue path and response schema, the plan selector intentionally reports that live plans are unavailable and checkout cannot proceed. This prevents customer-supplied plan IDs or prices from being trusted.
