@@ -1,20 +1,12 @@
 "use client";
 
-import {useEffect,useMemo,useState} from "react";
+import {useEffect,useState} from "react";
 import {useParams,useRouter} from "next/navigation";
 import {createClient} from "@/lib/supabase/client";
 
 type ServiceField={field_key:string;label:string;field_type:string;placeholder:string|null;required:boolean;options:any;sort_order:number};
 
 const VTU_SLUGS=new Set(["airtime-recharge","data-subscription","dstv-subscription","gotv-subscription","startimes-subscription","electricity-bill","exam-pins","data-pins"]);
-const NETWORK_SERVICE=(network:string,type:"airtime"|"data")=>{
- const n=network.toLowerCase();
- if(n==="mtn")return type==="airtime"?"mtn":"mtn-data";
- if(n==="airtel")return type==="airtime"?"airtel":"airtel-data";
- if(n==="glo")return type==="airtime"?"glo":"glo-data";
- if(n==="9mobile")return type==="airtime"?"etisalat":"etisalat-data";
- return "";
-};
 const FEE:Record<string,number>={airtime:0,data:0,cable:1000,electricity:500,exam:0,datapin:0};
 
 export default function RequestService(){
@@ -42,13 +34,12 @@ export default function RequestService(){
 
 
 
- const isDStvRenew=false;
- const providerAmount=["airtime","electricity","exam","datapin"].includes(kind)?Number(form.amount||0):Number(form.provider_amount||0);
+  const providerAmount=["airtime","electricity","exam","datapin"].includes(kind)?Number(form.amount||0):Number(form.provider_amount||0);
  const serviceFee=FEE[kind]||0;
  const total=providerAmount+serviceFee;
 
  function renderField(f:ServiceField){
-  if(isVTU&&["data-subscription","dstv-subscription"].includes(params.slug)&&["package","variation_code"].includes(f.field_key))return null;
+  if(isVTU&&["data-subscription","dstv-subscription","gotv-subscription","startimes-subscription"].includes(params.slug)&&["package","variation_code"].includes(f.field_key))return null;
   const value=form[f.field_key]??"";
   const common={value,onChange:(e:React.ChangeEvent<HTMLInputElement|HTMLTextAreaElement|HTMLSelectElement>)=>set(f.field_key,e.target.value),placeholder:f.placeholder??undefined};
   if(f.field_type==="textarea")return <textarea {...common} rows={5} className="mt-2 w-full rounded-xl border border-slate-200 px-4 py-3"/>;
@@ -70,7 +61,7 @@ export default function RequestService(){
     if(kind==="data"||kind==="cable"){
       orderForm={...orderForm,provider_amount:String(calculatedProviderAmount),service_fee:String(serviceFee)};
     }
-    if(["airtime","electricity","exam","datapin","cable"].includes(kind)){
+    if(["airtime","data","electricity","exam","datapin","cable"].includes(kind)){
       if(!Number.isFinite(providerAmount)||providerAmount<=0)throw new Error("Enter a valid amount.");
       orderForm={...orderForm,provider_amount:String(calculatedProviderAmount),service_fee:String(serviceFee)};
     }
