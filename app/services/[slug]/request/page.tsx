@@ -10,6 +10,12 @@ type CatalogueOption={id:string;name:string;price?:number};
 
 const VTU_SLUGS=new Set(["airtime-recharge","data-subscription","dstv-subscription","gotv-subscription","startimes-subscription","electricity-bill","exam-pins","data-pins"]);
 const FEE:Record<string,number>={airtime:0,data:0,cable:1000,electricity:500,exam:0,datapin:0};
+const INTERNAL_PROVIDER_FIELDS=new Set(["provider_plan_id","plan_id","plan_code","variation_code","package","provider_amount","network_id","cablename_id","cable_provider_id","cableplan_id","disco_id","meter_type_id","provider_id","data_plan_id","nifex_data_plan_id","nifex_plan_id","nifex_data_plan","nifex_plan_code","denomination","quantity","smartcard","smartcard_number","iuc_number","meter_number","exam_type"]);
+function isInternalProviderField(field:ServiceField){
+ const key=String(field.field_key||"").toLowerCase().replace(/\s+/g,"_");
+ const label=String(field.label||"").toLowerCase();
+ return INTERNAL_PROVIDER_FIELDS.has(key)||/nifex|provider.*plan.*id|plan.*id.*from.*provider|provider.*amount|variation.*code/.test(key)||/nifex|plan id from|provider plan id|provider amount/.test(label);
+}
 
 export default function RequestService(){
  const params=useParams<{slug:string}>(),router=useRouter();
@@ -97,9 +103,8 @@ export default function RequestService(){
 
  function renderField(f:ServiceField){
   // Provider IDs and provider-cost fields are internal integration data, never customer inputs.
-  const internalProviderFields=["provider_plan_id","plan_id","plan_code","variation_code","package","provider_amount","network_id","cablename_id","cable_provider_id","cableplan_id","disco_id","meter_type_id","provider_id","data_plan_id","nifex_data_plan_id","nifex_plan_id","nifex_data_plan","nifex_plan_code","denomination","quantity","smartcard","smartcard_number","iuc_number","meter_number","exam_type"];
   if(["data","cable","electricity","exam","datapin"].includes(kind)&&f.field_key==="amount")return null;
-  if(isVTU&&internalProviderFields.includes(f.field_key))return null;
+  if(isVTU&&isInternalProviderField(f))return null;
   const value=form[f.field_key]??"";
   const common={value,onChange:(e:React.ChangeEvent<HTMLInputElement|HTMLTextAreaElement|HTMLSelectElement>)=>set(f.field_key,e.target.value),placeholder:f.placeholder??undefined};
   if(f.field_type==="textarea")return <textarea {...common} rows={5} className="mt-2 w-full rounded-xl border border-slate-200 px-4 py-3"/>;
@@ -119,8 +124,7 @@ export default function RequestService(){
   try{
    const supabase=createClient();const {data:{user}}=await supabase.auth.getUser();
    if(!user){router.push("/login");return;}
-   const internalKeys=["provider_plan_id","plan_id","plan_code","variation_code","package","provider_amount","network_id","cablename_id","cable_provider_id","cableplan_id","disco_id","meter_type_id","provider_id","data_plan_id","nifex_data_plan_id","nifex_plan_id","nifex_data_plan","nifex_plan_code","denomination","quantity","smartcard","smartcard_number","iuc_number","meter_number","exam_type"];
-   const missing=fields.find(f=>f.required&&!String(form[f.field_key]??"").trim()&&!(isVTU&&(internalKeys.includes(f.field_key)||(["data","cable","electricity","exam","datapin"].includes(kind)&&f.field_key==="amount")||(kind==="data"&&f.field_key==="network"))));
+   const missing=fields.find(f=>f.required&&!String(form[f.field_key]??"").trim()&&!(isVTU&&(isInternalProviderField(f)||(["data","cable","electricity","exam","datapin"].includes(kind)&&f.field_key==="amount")||(kind==="data"&&f.field_key==="network"))));
    if(missing)throw new Error("Please provide: "+missing.label+".");
    let orderAmount=0;let orderForm={...form};
    if(isVTU){
@@ -196,7 +200,7 @@ export default function RequestService(){
     <label className="block text-sm font-bold">Quantity<input type="number" min="1" max="10" step="1" value={form.quantity||"1"} onChange={e=>set("quantity",e.target.value)} required className="mt-2 w-full rounded-xl border border-slate-200 px-4 py-3"/></label>
    </div>}
    {catalogueError&&["cable","electricity","exam","datapin"].includes(kind)&&<p className="rounded-lg bg-amber-50 p-3 text-sm text-amber-900">{catalogueError}</p>}
-   {fields.filter(f=>!(isVTU&&(["provider_plan_id","plan_id","plan_code","variation_code","package","provider_amount","network_id","cablename_id","cable_provider_id","cableplan_id","disco_id","meter_type_id","provider_id","data_plan_id","nifex_data_plan_id","nifex_plan_id","nifex_data_plan","nifex_plan_code","denomination","quantity","smartcard","smartcard_number","iuc_number","meter_number","exam_type"].includes(f.field_key)||(["data","cable","electricity","exam","datapin"].includes(kind)&&f.field_key==="amount")||(kind==="data"&&f.field_key==="network")))).map(f=><label key={f.field_key} className="block text-sm font-bold">{f.label}{f.required&&<span className="text-red-500"> *</span>}{renderField(f)}</label>)}
+   {fields.filter(f=>!(isVTU&&(isInternalProviderField(f)||(["data","cable","electricity","exam","datapin"].includes(kind)&&f.field_key==="amount")||(kind==="data"&&f.field_key==="network"))).map(f=><label key={f.field_key} className="block text-sm font-bold">{f.label}{f.required&&<span className="text-red-500"> *</span>}{renderField(f)}</label>)}
    {isVTU&&providerAmount>0&&<div className="rounded-2xl bg-slate-50 p-4 text-sm"><div className="flex justify-between"><span>Provider amount</span><b>₦{providerAmount.toLocaleString()}</b></div><div className="mt-2 flex justify-between"><span>Service fee</span><b>₦{serviceFee.toLocaleString()}</b></div><div className="mt-3 flex justify-between border-t pt-3 text-base"><span className="font-black">Total to pay</span><b>₦{total.toLocaleString()}</b></div></div>}
    <label className="block text-sm font-bold">Request details{!fields.length&&!isVTU&&<span className="text-red-500"> *</span>}<textarea required={!fields.length&&!isVTU} value={form.request_details??""} onChange={e=>set("request_details",e.target.value)} rows={5} className="mt-2 w-full rounded-xl border border-slate-200 px-4 py-3" placeholder="Tell us anything else we should know."/></label>
    <button disabled={loading||(kind==="data"&&(!form.provider_plan_id||plansLoading||Boolean(plansError)))||(["cable","electricity","exam","datapin"].includes(kind)&&(catalogueLoading||Boolean(catalogueError)))} className="w-full rounded-xl bg-[#0757d5] px-5 py-3.5 font-bold text-white disabled:cursor-not-allowed disabled:opacity-60">{loading?"Submitting…":isVTU&&total>0?"Continue to payment":"Submit"}</button>
