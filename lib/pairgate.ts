@@ -256,14 +256,19 @@ export async function fulfillOrder(orderId: string) {
   if (existing && existing.response && Object.keys(existing.response).length > 0) {
     return checkPendingTransaction(admin, order, existing);
   }
-
-  if (!existing) {
-    const { error: insertError } = await admin.from("provider_transactions").insert({
-      order_id: order.id, provider: "pairgate", request_id: rid, service_id: product.kind,
-      amount: product.amount, status: "pending", provider_status: "pending", request_data: product,
-    });
-    if (insertError && !clean(insertError.message).toLowerCase().includes("duplicate")) throw insertError;
+  if (existing) {
+    await admin.from("orders").update({
+      status: "needs_information",
+      admin_note: "A Pairgate transaction record exists without a saved provider response. It was not resubmitted to prevent a possible duplicate charge. Check Pairgate transaction history before taking action.",
+    }).eq("id", order.id);
+    return { status: "pending", message: "Existing Pairgate transaction has no saved response. It was not resubmitted to avoid a possible duplicate charge." };
   }
+
+  const { error: insertError } = await admin.from("provider_transactions").insert({
+    order_id: order.id, provider: "pairgate", request_id: rid, service_id: product.kind,
+    amount: product.amount, status: "pending", provider_status: "pending", request_data: product,
+  });
+  if (insertError) throw insertError;
 
   let result: any;
   try {
