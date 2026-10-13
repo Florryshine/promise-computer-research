@@ -167,20 +167,15 @@ function normalize(order: any) {
   const slug = String(service?.slug || "");
   const form = (order.form_data || {}) as Record<string, any>;
   const phone = normalizePhone(form.mobile_number || form.phone_number || form.phone);
-  if (slug === "airtime-recharge") {
-    const amount = Number(form.provider_amount || form.amount || order.amount);
-    return { kind: "airtime", network: networkSlug(form.network_id || form.network), phone, amount };
+  if (slug === "airtime-recharge") return { kind: "airtime", network: networkSlug(form.network_id || form.network), phone, amount: Number(form.provider_amount || form.amount || order.amount) };
+  if (slug === "data-subscription") return { kind: "data", network: networkSlug(form.network_id || form.network), phone, plan: clean(form.provider_plan_id || form.plan_id || form.plan), amount: Number(form.provider_amount || order.amount) };
+  if (["dstv-subscription","gotv-subscription","startimes-subscription"].includes(slug)) {
+    const provider = slug === "dstv-subscription" ? "dstv" : slug === "gotv-subscription" ? "gotv" : "startimes";
+    return { kind: "cable", provider: clean(form.provider_id || provider), plan: clean(form.provider_plan_id || form.plan_id), smartcard: clean(form.smartcard || form.smartcard_number || form.iuc_number), recipientName: clean(form.customer_name || form.full_name || form.recipient_name), amount: Number(form.provider_amount || order.amount) };
   }
-  if (slug === "data-subscription") {
-    const amount = Number(form.provider_amount || order.amount);
-    return {
-      kind: "data",
-      network: networkSlug(form.network_id || form.network),
-      phone,
-      plan: clean(form.provider_plan_id || form.plan_id || form.plan),
-      amount,
-    };
-  }
+  if (slug === "electricity-bill") return { kind: "electricity", provider: clean(form.provider_id || form.disco_id), amount: Number(form.provider_amount || form.amount), meterNumber: clean(form.meter_number), meterType: Number(form.meter_type), recipientName: clean(form.customer_name || form.full_name || form.recipient_name) };
+  if (slug === "exam-pins") return { kind: "exam", provider: clean(form.provider_id || form.exam_type).toLowerCase(), quantity: Number(form.quantity || 1), amount: Number(form.provider_amount || order.amount) };
+  if (slug === "data-pins") return { kind: "epin", provider: networkSlug(form.provider_id || form.network), denomination: Number(form.denomination || form.amount), quantity: Number(form.quantity || 1), amount: Number(form.provider_amount || order.amount) };
   return null;
 }
 
@@ -232,6 +227,7 @@ async function markNeedsAttention(admin: any, order: any, message: string) {
 }
 
 async function checkPendingTransaction(admin: any, order: any, transaction: any) {
+  if (transaction.service_id === "exam") return { status: "pending", message: "Exam PINs are delivered asynchronously by Pairgate. Waiting for the configured Pairgate webhook; do not resubmit this purchase." };
   const referenceCode = clean(transaction.provider_reference || first(transaction.response?.data, "reference_code"));
   if (!referenceCode) {
     return { status: "pending", message: "Pairgate was contacted but did not return a transaction reference. Check Pairgate history before any retry." };
@@ -258,12 +254,17 @@ export async function fulfillOrder(orderId: string) {
   const product = normalize(order);
   if (!product) return markNeedsAttention(admin, order, "This service is not yet enabled in the Pairgate adapter. Airtime and mobile data are supported in this integration pass; other services need their exact Pairgate fields/catalogues before automation.");
 
+  const phoneKind = product.kind === "airtime" || product.kind === "data";
   const problem =
     !Number.isFinite(product.amount) || product.amount <= 0 ? "A valid provider purchase amount is missing." :
-    !product.network ? "Pairgate network slug is missing." :
-    !/^0\d{10}$|^234\d{10}$/.test(product.phone) ? "Recipient phone number must be 11 digits starting with 0 or 13 digits starting with 234." :
+    phoneKind && !product.network ? "Pairgate network slug is missing." :
+    phoneKind && !/^0\d{10}$|^234\d{10}$/.test(product.phone) ? "Recipient phone number must be 11 digits starting with 0 or 13 digits starting with 234." :
     product.kind === "airtime" && product.amount < 50 ? "Pairgate airtime minimum is ₦50." :
-    product.kind === "data" && !product.plan ? "Pairgate data plan ID is missing." : "";
+    product.kind === "data" && !product.plan ? "Pairgate data plan ID is missing." :
+    product.kind === "cable" && (!["dstv","gotv","startimes"].includes(product.provider) || !product.plan || !/^\d{6,20}$/.test(product.smartcard)) ? "A valid cable provider, package and smartcard/IUC number are required." :
+    product.kind === "electricity" && (!product.provider || !/^\d{1,20}$/.test(product.meterNumber) || ![1,2].includes(product.meterType) || product.amount < 1000) ? "Electricity requires a valid disco, meter number, meter type and amount of at least ₦1,000." :
+    product.kind === "exam" && (!["waec","neco","nabt"].includes(product.provider) || !Number.isInteger(product.quantity) || product.quantity < 1 || product.quantity > 10) ? "Choose WAEC, NECO or NABTEB and a quantity from 1 to 10." :
+    product.kind === "epin" && (!product.provider || ![100,200,500,1000,2000,5000,10000,20000].includes(product.denomination) || !Number.isInteger(product.quantity) || product.quantity < 1 || product.quantity > 10) ? "Choose a supported network, denomination and quantity from 1 to 10." : "";
   if (problem) return markNeedsAttention(admin, order, problem);
 
   const rid = requestId(order);
@@ -289,16 +290,22 @@ export async function fulfillOrder(orderId: string) {
 
   let result: any;
   try {
-    result = await pairgateRequest(
-      product.kind === "airtime" ? "/airtime/purchase" : "/data/purchase",
-      "POST",
-      {
-        provider_id: product.network,
-        ...(product.kind === "data" ? { plan_id: product.plan } : { amount: product.amount }),
-        recipient: product.phone,
-        reference: rid,
-      },
-    );
+    const endpoint: Record<string,string> = {
+      airtime: "/airtime/purchase", data: "/data/purchase", cable: "/cable/purchase",
+      electricity: "/electricity/purchase", exam: "/education/purchase", epin: "/epin/purchase",
+    };
+    const requestBody: Record<string,unknown> = product.kind === "airtime"
+      ? { provider_id: product.network, amount: product.amount, recipient: product.phone, reference: rid }
+      : product.kind === "data"
+      ? { provider_id: product.network, plan_id: product.plan, recipient: product.phone, reference: rid }
+      : product.kind === "cable"
+      ? { provider_id: product.provider, plan_id: product.plan, smartcard: product.smartcard, recipient_name: product.recipientName || undefined, reference: rid }
+      : product.kind === "electricity"
+      ? { provider_id: product.provider, amount: product.amount, meter_number: product.meterNumber, meter_type: product.meterType, recipient_name: product.recipientName || undefined, reference: rid }
+      : product.kind === "exam"
+      ? { provider_id: product.provider, quantity: product.quantity, reference: rid }
+      : { provider_id: product.provider, quantity: product.quantity, denomination: product.denomination, reference: rid };
+    result = await pairgateRequest(endpoint[product.kind], "POST", requestBody);
   } catch (error) {
     const message = error instanceof Error ? error.message : "Pairgate request failed.";
     const ambiguous = message.startsWith("PAIRGATE_NETWORK_AMBIGUOUS") || /PAIRGATE_HTTP_5\d\d/.test(message);
