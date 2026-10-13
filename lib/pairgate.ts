@@ -173,13 +173,11 @@ function normalize(order: any) {
   }
   if (slug === "data-subscription") {
     const amount = Number(form.provider_amount || order.amount);
-    return {
-      kind: "data",
-      network: networkSlug(form.network_id || form.network),
-      phone,
-      plan: clean(form.provider_plan_id || form.plan_id || form.plan),
-      amount,
-    };
+    return { kind: "data", network: networkSlug(form.network_id || form.network), phone, plan: clean(form.provider_plan_id || form.plan_id || form.plan), amount };
+  }
+  if (["dstv-subscription", "gotv-subscription", "startimes-subscription"].includes(slug)) {
+    const provider = slug === "dstv-subscription" ? "dstv" : slug === "gotv-subscription" ? "gotv" : "startimes";
+    return { kind: "cable", provider, plan: clean(form.provider_plan_id || form.plan_id), smartcard: clean(form.smartcard || form.smartcard_number || form.iuc_number), recipientName: clean(form.full_name || form.recipient_name), amount: Number(form.provider_amount || 0) };
   }
   return null;
 }
