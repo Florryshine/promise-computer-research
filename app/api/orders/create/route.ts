@@ -6,7 +6,6 @@ import {getPairgateDataPlans,pairgateRequest} from "@/lib/pairgate";
 const VTU_SLUGS=new Set(["airtime-recharge","data-subscription","dstv-subscription","gotv-subscription","startimes-subscription","electricity-bill","exam-pins","data-pins"]);
 const clean=(v:unknown)=>String(v??"").trim();
 const serviceFee=(amount:number,rate:number)=>Math.ceil(amount*rate/100);
-const feeRateFor=(slug:string)=>slug==="airtime-recharge"?3:slug==="data-subscription"?5:VTU_SLUGS.has(slug)?5:0;
 function rows(payload:any):any[]{
  const data=payload?.data??payload;
  if(Array.isArray(data))return data;
