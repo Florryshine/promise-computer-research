@@ -17,7 +17,9 @@ export function pairgateConfigured() {
 
 export async function pairgateRequest(path: string, method: "GET" | "POST" = "GET", params?: Record<string, unknown>) {
   if (!API_KEY) throw new Error("Pairgate API key is missing. Set PAIRGATE_API_KEY in Vercel.");
-  const url = new URL(path.replace(/^\/+/, ""), BASE_URL + "/");
+  const cleanPath = path.replace(/^\/+/, "");
+  const testPath = TEST_MODE && !cleanPath.startsWith("test/") ? "test/" + cleanPath : cleanPath;
+  const url = new URL(testPath, BASE_URL + "/");
   const options: RequestInit = {
     method,
     headers: {
