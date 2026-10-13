@@ -115,7 +115,9 @@ export async function getPairgateDataPlans(networkInput?: string): Promise<Pairg
   const planTypes = [...new Set(matchingTypes)];
   if (!planTypes.length) throw new Error("Pairgate returned no data-plan categories for " + wanted + ".");
 
-  const results = await Promise.all(planTypes.map(async (planType) => {
+  const results = await Promise.all(planTypes.map(async (rawPlanType: unknown) => {
+    // Set/array inference can leave this value as unknown; normalize it before using it in the API request and returned plan.
+    const planType: string = clean(rawPlanType).toUpperCase();
     const payload = await pairgateRequest("/data-plans", "GET", { provider_id: wanted, plan_type: planType });
     return dataRows(payload, wanted).map((row: any): PairgateDataPlan | null => {
       const id = clean(first(row, "plan_id", "id", "planId"));
