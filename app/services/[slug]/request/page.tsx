@@ -54,7 +54,7 @@ export default function RequestService(){
       singleOptionDefaults[field.field_key]=String(option?.value??option);
     }
   }
-  setForm({full_name:p?.full_name??"",phone:p?.phone??"",email:user.email??"",phone_number:p?.phone??"",request_details:"",network:"mtn",...singleOptionDefaults});
+  setForm({full_name:p?.full_name??"",phone:p?.phone??"",email:user.email??"",phone_number:p?.phone??"",request_details:"",network:"mtn",meter_type:"1",quantity:"1",...singleOptionDefaults});
   setPageLoading(false);
  })();},[params.slug,router]);
 
