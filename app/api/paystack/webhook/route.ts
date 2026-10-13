@@ -38,18 +38,18 @@ export async function POST(request: Request) {
 
     // A paid payment may have been recorded by the browser callback before this webhook arrived.
     // Re-enter the idempotent fulfillment flow so a missed callback cannot strand a paid order.
-    // fulfillOrder uses the order-derived Nifex request ID and checks recorded provider transactions.
+    // fulfillOrder uses the order-derived Pairgate request ID and checks recorded provider transactions.
     if (payment.status === 'paid') {
       try {
         await fulfillOrder(payment.order_id);
       } catch (error) {
         const message = error instanceof Error ? error.message : 'Unknown fulfillment error';
-        console.error('Nifex fulfillment retry from duplicate webhook failed:', message);
+        console.error('Pairgate fulfillment retry from duplicate webhook failed:', message);
         const { error: updateError } = await supabase.from('orders').update({
           status: 'needs_information',
-          admin_note: 'Payment received, but automatic Nifex fulfillment encountered an unexpected error: ' + message.slice(0, 500)
+          admin_note: 'Payment received, but automatic Pairgate fulfillment encountered an unexpected error: ' + message.slice(0, 500)
         }).eq('id', payment.order_id);
-        if (updateError) console.error('Could not record Nifex fulfillment error:', updateError.message);
+        if (updateError) console.error('Could not record Pairgate fulfillment error:', updateError.message);
       }
       return NextResponse.json({ received: true });
     }
@@ -88,14 +88,14 @@ export async function POST(request: Request) {
       await fulfillOrder(payment.order_id);
     } catch (error) {
       const message = error instanceof Error ? error.message : 'Unknown fulfillment error';
-      console.error('Nifex fulfillment failed:', message);
+      console.error('Pairgate fulfillment failed:', message);
       // Keep the payment recorded as paid, but never leave the order silently stuck in processing.
       const { error: fulfillmentUpdateError } = await supabase.from('orders').update({
         status: 'needs_information',
-        admin_note: 'Payment received, but automatic Nifex fulfillment encountered an unexpected error: ' + message.slice(0, 500)
+        admin_note: 'Payment received, but automatic Pairgate fulfillment encountered an unexpected error: ' + message.slice(0, 500)
       }).eq('id', payment.order_id);
       if (fulfillmentUpdateError) {
-        console.error('Could not record Nifex fulfillment error on order:', fulfillmentUpdateError.message);
+        console.error('Could not record Pairgate fulfillment error on order:', fulfillmentUpdateError.message);
       }
     }
 
