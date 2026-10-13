@@ -128,6 +128,8 @@ export async function getPairgateDataPlans(networkInput?: string): Promise<Pairg
   const planTypes = [...new Set(matchingTypes)];
   if (!planTypes.length) throw new Error("Pairgate returned no data-plan categories for " + wanted + ".");
 
+  // Respect the cooldown between the categories request and the first plans request.
+  await new Promise(resolve => setTimeout(resolve, 2200));
   // Do not fan out requests with Promise.all: that burst repeatedly trips Pairgate's 429 limit.
   const allPlans: PairgateDataPlan[] = [];
   for (let index = 0; index < planTypes.length; index++) {
