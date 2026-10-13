@@ -6,17 +6,15 @@ import {createClient} from "@/lib/supabase/client";
 
 type ServiceField={field_key:string;label:string;field_type:string;placeholder:string|null;required:boolean;options:any;sort_order:number};
 type DataPlan={id:string;networkId:number|null;network:string;name:string;price:number;validity:string};
+type CatalogueOption={id:string;name:string;price?:number};
 
 const VTU_SLUGS=new Set(["airtime-recharge","data-subscription","dstv-subscription","gotv-subscription","startimes-subscription","electricity-bill","exam-pins","data-pins"]);
 const FEE:Record<string,number>={airtime:0,data:0,cable:1000,electricity:500,exam:0,datapin:0};
-
-const INTERNAL_PROVIDER_FIELDS=new Set(["provider_plan_id","plan_id","plan_code","variation_code","package","provider_amount","network_id","cablename_id","cable_provider_id","cableplan_id","disco_id","meter_type_id","provider_id","data_plan_id","nifex_data_plan_id","nifex_plan_id","nifex_data_plan","nifex_plan_code"]);
+const INTERNAL_PROVIDER_FIELDS=new Set(["provider_plan_id","plan_id","plan_code","variation_code","package","provider_amount","network_id","cablename_id","cable_provider_id","cableplan_id","disco_id","meter_type_id","provider_id","data_plan_id","nifex_data_plan_id","nifex_plan_id","nifex_data_plan","nifex_plan_code","denomination","quantity","smartcard","smartcard_number","iuc_number","meter_number","exam_type"]);
 function isInternalProviderField(field:ServiceField){
- const key=String(field.field_key||"").toLowerCase().replace(/[\s-]+/g,"_");
+ const key=String(field.field_key||"").toLowerCase().replace(/\s+/g,"_");
  const label=String(field.label||"").toLowerCase();
- return INTERNAL_PROVIDER_FIELDS.has(key)
-  || /nifex|provider.*plan.*id|plan.*id.*from.*provider|provider.*amount|variation.*code/.test(key)
-  || /nifex|plan id from|provider plan id|provider amount/.test(label);
+ return INTERNAL_PROVIDER_FIELDS.has(key)||/nifex|provider.*plan.*id|plan.*id.*from.*provider|provider.*amount|variation.*code/.test(key)||/nifex|plan id from|provider plan id|provider amount/.test(label);
 }
 
 export default function RequestService(){
@@ -24,6 +22,7 @@ export default function RequestService(){
  const [service,setService]=useState<any>(null),[fields,setFields]=useState<ServiceField[]>([]),[form,setForm]=useState<Record<string,string>>({});
  const [loading,setLoading]=useState(false),[pageLoading,setPageLoading]=useState(true),[error,setError]=useState("");
  const [dataPlans,setDataPlans]=useState<DataPlan[]>([]),[plansLoading,setPlansLoading]=useState(false),[plansError,setPlansError]=useState("");
+ const [catalogueOptions,setCatalogueOptions]=useState<CatalogueOption[]>([]),[servicePlans,setServicePlans]=useState<CatalogueOption[]>([]),[denominations,setDenominations]=useState<{value:number;price:number}[]>([]),[catalogueLoading,setCatalogueLoading]=useState(false),[catalogueError,setCatalogueError]=useState("");
 
  const isVTU=VTU_SLUGS.has(params.slug);
  const kind=params.slug==="airtime-recharge"?"airtime":params.slug==="data-subscription"?"data":["dstv-subscription","gotv-subscription","startimes-subscription"].includes(params.slug)?"cable":params.slug==="electricity-bill"?"electricity":params.slug==="exam-pins"?"exam":params.slug==="data-pins"?"datapin":"";
@@ -49,7 +48,8 @@ export default function RequestService(){
       singleOptionDefaults[field.field_key]=String(option?.value??option);
     }
   }
-  setForm({full_name:p?.full_name??"",phone:p?.phone??"",email:user.email??"",phone_number:p?.phone??"",request_details:"",network:"mtn",...singleOptionDefaults});
+  const initialProvider=params.slug==="dstv-subscription"?"dstv":params.slug==="gotv-subscription"?"gotv":params.slug==="startimes-subscription"?"startimes":"";
+  setForm({full_name:p?.full_name??"",phone:p?.phone??"",email:user.email??"",phone_number:p?.phone??"",request_details:"",network:"mtn",provider_id:initialProvider,quantity:"1",meter_type:"1",...singleOptionDefaults});
   setPageLoading(false);
  })();},[params.slug,router]);
 
@@ -68,13 +68,42 @@ export default function RequestService(){
 
 
 
-  const providerAmount=["airtime","electricity","exam","datapin"].includes(kind)?Number(form.amount||0):Number(form.provider_amount||0);
+ useEffect(()=>{
+  if(!["electricity","exam"].includes(kind))return;
+  let cancelled=false;setCatalogueLoading(true);setCatalogueError("");
+  const type=kind==="electricity"?"electricity":"education";
+  fetch("/api/pairgate/catalogue?kind="+type,{cache:"no-store"}).then(async r=>{const b=await r.json();if(!r.ok)throw new Error(b.error||"Could not load providers.");return b;})
+   .then(b=>{if(!cancelled)setCatalogueOptions(Array.isArray(b.providers)?b.providers:[]);})
+   .catch(e=>{if(!cancelled)setCatalogueError(e instanceof Error?e.message:"Could not load providers.");})
+   .finally(()=>{if(!cancelled)setCatalogueLoading(false);});
+  return ()=>{cancelled=true;};
+ },[kind]);
+ useEffect(()=>{
+  if(kind!=="cable"||!form.provider_id)return;
+  let cancelled=false;setCatalogueLoading(true);setCatalogueError("");setServicePlans([]);
+  fetch("/api/pairgate/catalogue?kind=cable&provider="+encodeURIComponent(form.provider_id),{cache:"no-store"}).then(async r=>{const b=await r.json();if(!r.ok)throw new Error(b.error||"Could not load packages.");return b;})
+   .then(b=>{if(!cancelled)setServicePlans(Array.isArray(b.plans)?b.plans:[]);})
+   .catch(e=>{if(!cancelled)setCatalogueError(e instanceof Error?e.message:"Could not load packages.");})
+   .finally(()=>{if(!cancelled)setCatalogueLoading(false);});
+  return ()=>{cancelled=true;};
+ },[kind,form.provider_id]);
+ useEffect(()=>{
+  if(kind!=="datapin"||!form.provider_id)return;
+  let cancelled=false;setCatalogueLoading(true);setCatalogueError("");setDenominations([]);
+  fetch("/api/pairgate/catalogue?kind=epin&provider="+encodeURIComponent(form.provider_id),{cache:"no-store"}).then(async r=>{const b=await r.json();if(!r.ok)throw new Error(b.error||"Could not load denominations.");return b;})
+   .then(b=>{if(!cancelled)setDenominations((Array.isArray(b.denominations)?b.denominations:[]).map((d:any)=>({value:Number(d.value),price:Number(d.price)})).filter((d:{value:number;price:number})=>Number.isFinite(d.value)&&d.value>0&&Number.isFinite(d.price)&&d.price>0));})
+   .catch(e=>{if(!cancelled)setCatalogueError(e instanceof Error?e.message:"Could not load denominations.");})
+   .finally(()=>{if(!cancelled)setCatalogueLoading(false);});
+  return ()=>{cancelled=true;};
+ },[kind,form.provider_id]);
+
+  const providerAmount=kind==="exam"?Number(service?.price||0)*Number(form.quantity||1):kind==="datapin"?(denominations.find(d=>d.value===Number(form.denomination))?.price||0)*Number(form.quantity||1):["airtime","electricity"].includes(kind)?Number(form.amount||0):Number(form.provider_amount||0);
  const serviceFee=FEE[kind]||0;
  const total=providerAmount+serviceFee;
 
  function renderField(f:ServiceField){
   // Provider IDs and provider-cost fields are internal integration data, never customer inputs.
-  if((kind==="data"||kind==="cable")&&f.field_key==="amount")return null;
+  if(["data","cable","electricity","exam","datapin"].includes(kind)&&f.field_key==="amount")return null;
   if(isVTU&&isInternalProviderField(f))return null;
   const value=form[f.field_key]??"";
   const common={value,onChange:(e:React.ChangeEvent<HTMLInputElement|HTMLTextAreaElement|HTMLSelectElement>)=>set(f.field_key,e.target.value),placeholder:f.placeholder??undefined};
@@ -88,10 +117,14 @@ export default function RequestService(){
   e.preventDefault();
   setLoading(true);setError("");
   if(kind==="data"&&!form.provider_plan_id){setError("Choose an available data plan first.");setLoading(false);return;}
+  if(kind==="cable"&&(!form.provider_plan_id||!form.smartcard)){setError("Choose a TV package and enter the smartcard/IUC number.");setLoading(false);return;}
+  if(kind==="electricity"&&(!form.provider_id||!form.meter_number||Number(form.amount)<1000)){setError("Choose an electricity provider, enter a meter number and amount of at least ₦1,000.");setLoading(false);return;}
+  if(kind==="exam"&&(!form.provider_id||!form.quantity)){setError("Choose an exam PIN type and quantity.");setLoading(false);return;}
+  if(kind==="datapin"&&(!form.provider_id||!form.denomination||!form.quantity)){setError("Choose a network, denomination and quantity.");setLoading(false);return;}
   try{
    const supabase=createClient();const {data:{user}}=await supabase.auth.getUser();
    if(!user){router.push("/login");return;}
-   const missing=fields.find(f=>f.required&&!String(form[f.field_key]??"").trim()&&!(isVTU&&(isInternalProviderField(f)||((kind==="data"||kind==="cable")&&f.field_key==="amount")||(kind==="data"&&f.field_key==="network"))));
+   const missing=fields.find(f=>f.required&&!String(form[f.field_key]??"").trim()&&!(isVTU&&(isInternalProviderField(f)||(["data","cable","electricity","exam","datapin"].includes(kind)&&f.field_key==="amount")||(kind==="data"&&f.field_key==="network"))));
    if(missing)throw new Error("Please provide: "+missing.label+".");
    let orderAmount=0;let orderForm={...form};
    if(isVTU){
@@ -122,7 +155,7 @@ export default function RequestService(){
 
  if(pageLoading)return <main className="section"><div className="container"><p className="text-slate-500">Loading service…</p></div></main>;
  if(!service)return <main className="section"><div className="container"><h1 className="text-2xl font-black">Service not found or unavailable</h1></div></main>;
- if(isVTU&&!["airtime-recharge","data-subscription"].includes(params.slug))return <main className="section bg-slate-50"><div className="container"><div className="mx-auto max-w-2xl rounded-3xl bg-white p-6 shadow-soft sm:p-8"><h1 className="text-2xl font-black">Service temporarily unavailable</h1><p className="mt-3 text-slate-600">We are completing the Pairgate integration for this service. Payments are disabled for now so you are not charged before automatic delivery is ready.</p><button onClick={()=>router.push("/services")} className="mt-6 rounded-xl bg-[#0757d5] px-5 py-3 font-bold text-white">Back to services</button></div></div></main>;
+
 
  return <main className="section bg-slate-50"><div className="container"><div className="mx-auto max-w-2xl rounded-3xl bg-white p-6 shadow-soft sm:p-8">
   <p className="text-xs font-bold uppercase tracking-[.16em] text-[#0757d5]">Service request</p><h1 className="mt-2 text-3xl font-black">{service.title}</h1>
@@ -145,10 +178,32 @@ export default function RequestService(){
     {plansError&&<p className="rounded-lg bg-amber-50 p-3 text-sm text-amber-900">Could not load live plans: {plansError}</p>}
     {!plansLoading&&!plansError&&dataPlans.length===0&&<p className="text-sm text-slate-600">No plans were returned by Pairgate. The provider catalogue endpoint must be configured before data purchases can be enabled.</p>}
    </div>}
-   {fields.filter(f=>!(isVTU&&(isInternalProviderField(f)||((kind==="data"||kind==="cable")&&f.field_key==="amount")||(kind==="data"&&f.field_key==="network")))).map(f=><label key={f.field_key} className="block text-sm font-bold">{f.label}{f.required&&<span className="text-red-500"> *</span>}{renderField(f)}</label>)}
+   {kind==="cable"&&<div className="space-y-4 rounded-2xl border border-slate-200 p-4">
+    <label className="block text-sm font-bold">TV provider<select value={form.provider_id||""} onChange={e=>{set("provider_id",e.target.value);set("provider_plan_id","");set("provider_amount","");}} className="mt-2 w-full rounded-xl border border-slate-200 bg-white px-4 py-3"><option value="">Choose provider</option><option value="dstv">DStv</option><option value="gotv">GOtv</option><option value="startimes">StarTimes</option></select></label>
+    <label className="block text-sm font-bold">Package<select value={form.provider_plan_id||""} disabled={catalogueLoading||!servicePlans.length} onChange={e=>{const p=servicePlans.find(x=>x.id===e.target.value);set("provider_plan_id",p?.id||"");set("provider_amount",p?String(p.price):"");set("plan_name",p?.name||"");}} className="mt-2 w-full rounded-xl border border-slate-200 bg-white px-4 py-3"><option value="">{catalogueLoading?"Loading packages…":"Choose package"}</option>{servicePlans.map(p=><option key={p.id} value={p.id}>{p.name} — ₦{Number(p.price||0).toLocaleString()}</option>)}</select></label>
+    <label className="block text-sm font-bold">Smartcard / IUC number<input value={form.smartcard||""} onChange={e=>set("smartcard",e.target.value)} inputMode="numeric" required className="mt-2 w-full rounded-xl border border-slate-200 px-4 py-3"/></label>
+   </div>}
+   {kind==="electricity"&&<div className="space-y-4 rounded-2xl border border-slate-200 p-4">
+    <label className="block text-sm font-bold">Electricity provider<select value={form.provider_id||""} onChange={e=>set("provider_id",e.target.value)} disabled={catalogueLoading} className="mt-2 w-full rounded-xl border border-slate-200 bg-white px-4 py-3"><option value="">Choose disco</option>{catalogueOptions.map(p=><option key={p.id} value={p.id}>{p.name}</option>)}</select></label>
+    <label className="block text-sm font-bold">Meter number<input value={form.meter_number||""} onChange={e=>set("meter_number",e.target.value)} inputMode="numeric" required className="mt-2 w-full rounded-xl border border-slate-200 px-4 py-3"/></label>
+    <label className="block text-sm font-bold">Meter type<select value={form.meter_type||"1"} onChange={e=>set("meter_type",e.target.value)} className="mt-2 w-full rounded-xl border border-slate-200 bg-white px-4 py-3"><option value="1">Prepaid</option><option value="2">Postpaid</option></select></label>
+    <label className="block text-sm font-bold">Amount (minimum ₦1,000)<input type="number" min="1000" step="100" value={form.amount||""} onChange={e=>set("amount",e.target.value)} required className="mt-2 w-full rounded-xl border border-slate-200 px-4 py-3"/></label>
+   </div>}
+   {kind==="exam"&&<div className="space-y-4 rounded-2xl border border-slate-200 p-4">
+    <label className="block text-sm font-bold">Exam PIN type<select value={form.provider_id||""} onChange={e=>set("provider_id",e.target.value)} disabled={catalogueLoading} className="mt-2 w-full rounded-xl border border-slate-200 bg-white px-4 py-3"><option value="">Choose exam</option>{catalogueOptions.map(p=><option key={p.id} value={p.id}>{p.name}</option>)}</select></label>
+    <label className="block text-sm font-bold">Quantity<input type="number" min="1" max="10" step="1" value={form.quantity||"1"} onChange={e=>set("quantity",e.target.value)} required className="mt-2 w-full rounded-xl border border-slate-200 px-4 py-3"/></label>
+    <p className="text-sm text-slate-500">Price uses the per-PIN price configured for this service.</p>
+   </div>}
+   {kind==="datapin"&&<div className="space-y-4 rounded-2xl border border-slate-200 p-4">
+    <label className="block text-sm font-bold">Network<select value={form.provider_id||""} onChange={e=>{set("provider_id",e.target.value);set("denomination","");}} className="mt-2 w-full rounded-xl border border-slate-200 bg-white px-4 py-3"><option value="">Choose network</option><option value="mtn">MTN</option><option value="airtel">Airtel</option><option value="glo">Glo</option><option value="9mobile">9mobile</option></select></label>
+    <label className="block text-sm font-bold">Recharge denomination<select value={form.denomination||""} onChange={e=>set("denomination",e.target.value)} disabled={catalogueLoading||!denominations.length} className="mt-2 w-full rounded-xl border border-slate-200 bg-white px-4 py-3"><option value="">{catalogueLoading?"Loading denominations…":"Choose denomination"}</option>{denominations.map(d=><option key={d.value} value={d.value}>₦{d.value.toLocaleString()} (₦{d.price.toLocaleString()} each)</option>)}</select></label>
+    <label className="block text-sm font-bold">Quantity<input type="number" min="1" max="10" step="1" value={form.quantity||"1"} onChange={e=>set("quantity",e.target.value)} required className="mt-2 w-full rounded-xl border border-slate-200 px-4 py-3"/></label>
+   </div>}
+   {catalogueError&&["cable","electricity","exam","datapin"].includes(kind)&&<p className="rounded-lg bg-amber-50 p-3 text-sm text-amber-900">{catalogueError}</p>}
+   {fields.filter(f=>!(isVTU&&(isInternalProviderField(f)||(["data","cable","electricity","exam","datapin"].includes(kind)&&f.field_key==="amount")||(kind==="data"&&f.field_key==="network")))).map(f=><label key={f.field_key} className="block text-sm font-bold">{f.label}{f.required&&<span className="text-red-500"> *</span>}{renderField(f)}</label>)}
    {isVTU&&providerAmount>0&&<div className="rounded-2xl bg-slate-50 p-4 text-sm"><div className="flex justify-between"><span>Provider amount</span><b>₦{providerAmount.toLocaleString()}</b></div><div className="mt-2 flex justify-between"><span>Service fee</span><b>₦{serviceFee.toLocaleString()}</b></div><div className="mt-3 flex justify-between border-t pt-3 text-base"><span className="font-black">Total to pay</span><b>₦{total.toLocaleString()}</b></div></div>}
    <label className="block text-sm font-bold">Request details{!fields.length&&!isVTU&&<span className="text-red-500"> *</span>}<textarea required={!fields.length&&!isVTU} value={form.request_details??""} onChange={e=>set("request_details",e.target.value)} rows={5} className="mt-2 w-full rounded-xl border border-slate-200 px-4 py-3" placeholder="Tell us anything else we should know."/></label>
-   <button disabled={loading||(kind==="data"&&(!form.provider_plan_id||plansLoading||Boolean(plansError)))} className="w-full rounded-xl bg-[#0757d5] px-5 py-3.5 font-bold text-white disabled:cursor-not-allowed disabled:opacity-60">{loading?"Submitting…":isVTU&&total>0?"Continue to payment":"Submit"}</button>
+   <button disabled={loading||(kind==="data"&&(!form.provider_plan_id||plansLoading||Boolean(plansError)))||(["cable","electricity","exam","datapin"].includes(kind)&&(catalogueLoading||Boolean(catalogueError)))} className="w-full rounded-xl bg-[#0757d5] px-5 py-3.5 font-bold text-white disabled:cursor-not-allowed disabled:opacity-60">{loading?"Submitting…":isVTU&&total>0?"Continue to payment":"Submit"}</button>
   </form>
  </div></div></main>;
 }
