@@ -208,7 +208,7 @@ async function updateFinalStatus(admin: any, order: any, transaction: any, statu
 
   if (status === "successful") {
     const pins = Array.isArray(providerData?.pins) ? providerData.pins : [];
-    const pinText = pins.map((item:any) => [item.pin ? "PIN: " + item.pin : "", item.serial ? "Serial: " + item.serial : "", item.denomination ? "Denomination: ₦" + item.denomination : ""].filter(Boolean).join(" | ")).join("\\n");
+    const pinText = pins.map((item:any) => [item.pin ? "PIN: " + item.pin : "", item.serial ? "Serial: " + item.serial : "", item.denomination ? "Denomination: ₦" + item.denomination : ""].filter(Boolean).join(" | ")).join("\n");
     const deliveredPin = clean(first(providerData, "pin", "token", "electricity_token"));
     const updatedForm = {
       ...(order.form_data || {}),
