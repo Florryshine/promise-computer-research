@@ -24,6 +24,7 @@ export default function RequestService(){
  const [service,setService]=useState<any>(null),[fields,setFields]=useState<ServiceField[]>([]),[form,setForm]=useState<Record<string,string>>({});
  const [loading,setLoading]=useState(false),[pageLoading,setPageLoading]=useState(true),[error,setError]=useState("");
  const [dataPlans,setDataPlans]=useState<DataPlan[]>([]),[plansLoading,setPlansLoading]=useState(false),[plansError,setPlansError]=useState("");
+ const [cablePlans,setCablePlans]=useState<DataPlan[]>([]),[cableLoading,setCableLoading]=useState(false),[cableError,setCableError]=useState("");
 
  const isVTU=VTU_SLUGS.has(params.slug);
  const kind=params.slug==="airtime-recharge"?"airtime":params.slug==="data-subscription"?"data":["dstv-subscription","gotv-subscription","startimes-subscription"].includes(params.slug)?"cable":params.slug==="electricity-bill"?"electricity":params.slug==="exam-pins"?"exam":params.slug==="data-pins"?"datapin":"";
@@ -52,6 +53,19 @@ export default function RequestService(){
   setForm({full_name:p?.full_name??"",phone:p?.phone??"",email:user.email??"",phone_number:p?.phone??"",request_details:"",network:"mtn",...singleOptionDefaults});
   setPageLoading(false);
  })();},[params.slug,router]);
+
+ useEffect(()=>{
+  if(kind!=="cable")return;
+  const provider=params.slug==="dstv-subscription"?"dstv":params.slug==="gotv-subscription"?"gotv":"startimes";
+  let cancelled=false;
+  setCableLoading(true);setCableError("");setCablePlans([]);
+  fetch("/api/pairgate/cable-plans?provider="+provider,{cache:"no-store"})
+   .then(async response=>{const body=await response.json();if(!response.ok)throw new Error(body.error||"Could not load TV packages.");return body;})
+   .then(body=>{if(!cancelled)setCablePlans(Array.isArray(body.plans)?body.plans:[]);})
+   .catch(err=>{if(!cancelled)setCableError(err instanceof Error?err.message:"Could not load TV packages.");})
+   .finally(()=>{if(!cancelled)setCableLoading(false);});
+  return ()=>{cancelled=true;};
+ },[kind,params.slug]);
 
  useEffect(()=>{
   if(kind!=="data"||!form.network)return;
@@ -122,7 +136,7 @@ export default function RequestService(){
 
  if(pageLoading)return <main className="section"><div className="container"><p className="text-slate-500">Loading service…</p></div></main>;
  if(!service)return <main className="section"><div className="container"><h1 className="text-2xl font-black">Service not found or unavailable</h1></div></main>;
- if(isVTU&&!["airtime-recharge","data-subscription"].includes(params.slug))return <main className="section bg-slate-50"><div className="container"><div className="mx-auto max-w-2xl rounded-3xl bg-white p-6 shadow-soft sm:p-8"><h1 className="text-2xl font-black">Service temporarily unavailable</h1><p className="mt-3 text-slate-600">We are completing the Pairgate integration for this service. Payments are disabled for now so you are not charged before automatic delivery is ready.</p><button onClick={()=>router.push("/services")} className="mt-6 rounded-xl bg-[#0757d5] px-5 py-3 font-bold text-white">Back to services</button></div></div></main>;
+ if(isVTU&&!["airtime-recharge","data-subscription","dstv-subscription","gotv-subscription","startimes-subscription"].includes(params.slug))return <main className="section bg-slate-50"><div className="container"><div className="mx-auto max-w-2xl rounded-3xl bg-white p-6 shadow-soft sm:p-8"><h1 className="text-2xl font-black">Service temporarily unavailable</h1><p className="mt-3 text-slate-600">We are completing the Pairgate integration for this service. Payments are disabled for now so you are not charged before automatic delivery is ready.</p><button onClick={()=>router.push("/services")} className="mt-6 rounded-xl bg-[#0757d5] px-5 py-3 font-bold text-white">Back to services</button></div></div></main>;
 
  return <main className="section bg-slate-50"><div className="container"><div className="mx-auto max-w-2xl rounded-3xl bg-white p-6 shadow-soft sm:p-8">
   <p className="text-xs font-bold uppercase tracking-[.16em] text-[#0757d5]">Service request</p><h1 className="mt-2 text-3xl font-black">{service.title}</h1>
@@ -130,6 +144,18 @@ export default function RequestService(){
   {error&&<div className="mt-5 rounded-xl border border-red-200 bg-red-50 p-3 text-sm text-red-700">{error}</div>}
   <form onSubmit={submit} className="mt-7 space-y-5">
    {[["full_name","Full name","text"],["phone","Phone number","tel"],["email","Email","email"]].map(([k,l,t])=><label key={k} className="block text-sm font-bold">{l}<input required value={form[k]??""} onChange={e=>set(k,e.target.value)} type={t} className="mt-2 w-full rounded-xl border border-slate-200 px-4 py-3"/></label>)}
+   {kind==="cable"&&<div className="space-y-4 rounded-2xl border border-slate-200 p-4">
+    <label className="block text-sm font-bold">TV package *
+     <select value={form.provider_plan_id||""} disabled={cableLoading||cablePlans.length===0} onChange={e=>{const plan=cablePlans.find(p=>p.id===e.target.value);set("provider_plan_id",plan?.id||"");set("provider_amount",plan?String(plan.price):"");set("plan_name",plan?.name||"");}} className="mt-2 w-full rounded-xl border border-slate-200 bg-white px-4 py-3">
+      <option value="">{cableLoading?"Loading packages…":cablePlans.length?"Choose a package":"No packages available"}</option>
+      {cablePlans.map(plan=><option key={plan.id} value={plan.id}>{plan.name} — ₦{plan.price.toLocaleString()}</option>)}
+     </select>
+    </label>
+    <label className="block text-sm font-bold">Smartcard / IUC number *
+     <input value={form.smartcard||form.smartcard_number||form.iuc_number||""} onChange={e=>set("smartcard",e.target.value)} required inputMode="numeric" className="mt-2 w-full rounded-xl border border-slate-200 px-4 py-3" placeholder="Enter the number on your decoder"/>
+    </label>
+    {cableError&&<p className="rounded-lg bg-amber-50 p-3 text-sm text-amber-900">{cableError}</p>}
+   </div>}
    {kind==="data"&&<div className="space-y-4 rounded-2xl border border-slate-200 p-4">
     <label className="block text-sm font-bold">Network *
      <select value={form.network||"mtn"} onChange={e=>{set("network",e.target.value);set("provider_plan_id","");set("provider_amount","");set("plan_name","");}} className="mt-2 w-full rounded-xl border border-slate-200 bg-white px-4 py-3">
@@ -148,7 +174,7 @@ export default function RequestService(){
    {fields.filter(f=>!(isVTU&&(isInternalProviderField(f)||((kind==="data"||kind==="cable")&&f.field_key==="amount")||(kind==="data"&&f.field_key==="network")))).map(f=><label key={f.field_key} className="block text-sm font-bold">{f.label}{f.required&&<span className="text-red-500"> *</span>}{renderField(f)}</label>)}
    {isVTU&&providerAmount>0&&<div className="rounded-2xl bg-slate-50 p-4 text-sm"><div className="flex justify-between"><span>Provider amount</span><b>₦{providerAmount.toLocaleString()}</b></div><div className="mt-2 flex justify-between"><span>Service fee</span><b>₦{serviceFee.toLocaleString()}</b></div><div className="mt-3 flex justify-between border-t pt-3 text-base"><span className="font-black">Total to pay</span><b>₦{total.toLocaleString()}</b></div></div>}
    <label className="block text-sm font-bold">Request details{!fields.length&&!isVTU&&<span className="text-red-500"> *</span>}<textarea required={!fields.length&&!isVTU} value={form.request_details??""} onChange={e=>set("request_details",e.target.value)} rows={5} className="mt-2 w-full rounded-xl border border-slate-200 px-4 py-3" placeholder="Tell us anything else we should know."/></label>
-   <button disabled={loading||(kind==="data"&&(!form.provider_plan_id||plansLoading||Boolean(plansError)))} className="w-full rounded-xl bg-[#0757d5] px-5 py-3.5 font-bold text-white disabled:cursor-not-allowed disabled:opacity-60">{loading?"Submitting…":isVTU&&total>0?"Continue to payment":"Submit"}</button>
+   <button disabled={loading||(kind==="data"&&(!form.provider_plan_id||plansLoading||Boolean(plansError)))||(kind==="cable"&&(!form.provider_plan_id||!form.smartcard||cableLoading||Boolean(cableError)))} className="w-full rounded-xl bg-[#0757d5] px-5 py-3.5 font-bold text-white disabled:cursor-not-allowed disabled:opacity-60">{loading?"Submitting…":isVTU&&total>0?"Continue to payment":"Submit"}</button>
   </form>
  </div></div></main>;
 }
