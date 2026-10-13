@@ -60,7 +60,7 @@ export async function pairgateRequest(path: string, method: "GET" | "POST" = "GE
 }
 
 function normalizePhone(value: unknown): string {
-  const digits = clean(value).replace(/\\D/g, "");
+  const digits = clean(value).replace(/\D/g, "");
   if (digits.length === 11 && digits.startsWith("0")) return digits;
   if (digits.length === 13 && digits.startsWith("234")) return digits;
   if (digits.length === 10) return "0" + digits;
@@ -244,7 +244,7 @@ export async function fulfillOrder(orderId: string) {
   const problem =
     !Number.isFinite(product.amount) || product.amount <= 0 ? "A valid provider purchase amount is missing." :
     !product.network ? "Pairgate network slug is missing." :
-    !/^0\\d{10}$|^234\\d{10}$/.test(product.phone) ? "Recipient phone number must be 11 digits starting with 0 or 13 digits starting with 234." :
+    !/^0\d{10}$|^234\d{10}$/.test(product.phone) ? "Recipient phone number must be 11 digits starting with 0 or 13 digits starting with 234." :
     product.kind === "airtime" && product.amount < 50 ? "Pairgate airtime minimum is ₦50." :
     product.kind === "data" && !product.plan ? "Pairgate data plan ID is missing." : "";
   if (problem) return markNeedsAttention(admin, order, problem);
