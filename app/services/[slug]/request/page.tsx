@@ -65,7 +65,7 @@ export default function RequestService(){
 
  function renderField(f:ServiceField){
   // Provider IDs and provider-cost fields are internal integration data, never customer inputs.
-  const internalProviderFields=["provider_plan_id","plan_id","plan_code","variation_code","package","provider_amount","network_id","cablename_id","cable_provider_id","cableplan_id","disco_id","meter_type_id","provider_id","data_plan_id"];
+  const internalProviderFields=["provider_plan_id","plan_id","plan_code","variation_code","package","provider_amount","network_id","cablename_id","cable_provider_id","cableplan_id","disco_id","meter_type_id","provider_id","data_plan_id","nifex_data_plan_id","nifex_plan_id","nifex_data_plan","nifex_plan_code"];
   if((kind==="data"||kind==="cable")&&f.field_key==="amount")return null;
   if(isVTU&&internalProviderFields.includes(f.field_key))return null;
   const value=form[f.field_key]??"";
