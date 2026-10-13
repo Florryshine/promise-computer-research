@@ -117,7 +117,7 @@ export default function RequestService(){
 
  function renderField(f:ServiceField){
   // Provider IDs and provider-cost fields are internal integration data, never customer inputs.
-  if((kind==="data"||kind==="cable")&&f.field_key==="amount")return null;
+  if(["data","cable","electricity","exam","datapin"].includes(kind)&&f.field_key==="amount")return null;
   if(isVTU&&isInternalProviderField(f))return null;
   const value=form[f.field_key]??"";
   const common={value,onChange:(e:React.ChangeEvent<HTMLInputElement|HTMLTextAreaElement|HTMLSelectElement>)=>set(f.field_key,e.target.value),placeholder:f.placeholder??undefined};
@@ -173,6 +173,35 @@ export default function RequestService(){
   {error&&<div className="mt-5 rounded-xl border border-red-200 bg-red-50 p-3 text-sm text-red-700">{error}</div>}
   <form onSubmit={submit} className="mt-7 space-y-5">
    {[["full_name","Full name","text"],["phone","Phone number","tel"],["email","Email","email"]].map(([k,l,t])=><label key={k} className="block text-sm font-bold">{l}<input required value={form[k]??""} onChange={e=>set(k,e.target.value)} type={t} className="mt-2 w-full rounded-xl border border-slate-200 px-4 py-3"/></label>)}
+   {kind==="electricity"&&<div className="space-y-4 rounded-2xl border border-slate-200 p-4">
+    <label className="block text-sm font-bold">Electricity provider *
+     <select value={form.provider_id||""} onChange={e=>set("provider_id",e.target.value)} required disabled={utilityLoading||utilityProviders.length===0} className="mt-2 w-full rounded-xl border border-slate-200 bg-white px-4 py-3"><option value="">{utilityLoading?"Loading providers…":"Choose your electricity provider"}</option>{utilityProviders.map(p=><option key={p.id} value={p.id}>{p.name}</option>)}</select>
+    </label>
+    <label className="block text-sm font-bold">Meter number *<input value={form.meter_number||""} onChange={e=>set("meter_number",e.target.value)} required inputMode="numeric" className="mt-2 w-full rounded-xl border border-slate-200 px-4 py-3"/></label>
+    <label className="block text-sm font-bold">Meter type *
+     <select value={form.meter_type||"1"} onChange={e=>set("meter_type",e.target.value)} className="mt-2 w-full rounded-xl border border-slate-200 bg-white px-4 py-3"><option value="1">Prepaid</option><option value="2">Postpaid</option></select>
+    </label>
+    <label className="block text-sm font-bold">Electricity amount (minimum ₦1,000) *<input type="number" min="1000" step="100" value={form.amount||""} onChange={e=>set("amount",e.target.value)} required className="mt-2 w-full rounded-xl border border-slate-200 px-4 py-3"/></label>
+    {utilityError&&<p className="rounded-lg bg-amber-50 p-3 text-sm text-amber-900">{utilityError}</p>}
+   </div>}
+   {kind==="exam"&&<div className="space-y-4 rounded-2xl border border-slate-200 p-4">
+    <label className="block text-sm font-bold">Exam PIN type *
+     <select value={form.exam_type||""} onChange={e=>set("exam_type",e.target.value)} required disabled={utilityLoading||utilityProviders.length===0} className="mt-2 w-full rounded-xl border border-slate-200 bg-white px-4 py-3"><option value="">{utilityLoading?"Loading exam providers…":"Choose exam body"}</option>{utilityProviders.map(p=><option key={p.id} value={p.id}>{p.name}</option>)}</select>
+    </label>
+    <label className="block text-sm font-bold">Quantity *<input type="number" min="1" max="10" step="1" value={form.quantity||"1"} onChange={e=>set("quantity",e.target.value)} required className="mt-2 w-full rounded-xl border border-slate-200 px-4 py-3"/></label>
+    <p className="text-sm text-slate-600">Price per PIN: ₦{Number(service?.price||0).toLocaleString()}. PINs are delivered after Pairgate completes processing.</p>
+    {utilityError&&<p className="rounded-lg bg-amber-50 p-3 text-sm text-amber-900">{utilityError}</p>}
+   </div>}
+   {kind==="datapin"&&<div className="space-y-4 rounded-2xl border border-slate-200 p-4">
+    <label className="block text-sm font-bold">Network *
+     <select value={form.network||"mtn"} onChange={e=>{set("network",e.target.value);set("denomination","");}} className="mt-2 w-full rounded-xl border border-slate-200 bg-white px-4 py-3"><option value="mtn">MTN</option><option value="airtel">Airtel</option><option value="glo">Glo</option><option value="9mobile">9mobile</option></select>
+    </label>
+    <label className="block text-sm font-bold">Recharge PIN denomination *
+     <select value={form.denomination||""} onChange={e=>set("denomination",e.target.value)} required disabled={epinLoading||epinDenominations.length===0} className="mt-2 w-full rounded-xl border border-slate-200 bg-white px-4 py-3"><option value="">{epinLoading?"Loading denominations…":"Choose denomination"}</option>{epinDenominations.map(d=><option key={d.value} value={d.value}>{d.label}</option>)}</select>
+    </label>
+    <label className="block text-sm font-bold">Quantity *<input type="number" min="1" max="10" step="1" value={form.quantity||"1"} onChange={e=>set("quantity",e.target.value)} required className="mt-2 w-full rounded-xl border border-slate-200 px-4 py-3"/></label>
+    {epinError&&<p className="rounded-lg bg-amber-50 p-3 text-sm text-amber-900">{epinError}</p>}
+   </div>}
    {kind==="cable"&&<div className="space-y-4 rounded-2xl border border-slate-200 p-4">
     <label className="block text-sm font-bold">TV package *
      <select value={form.provider_plan_id||""} disabled={cableLoading||cablePlans.length===0} onChange={e=>{const plan=cablePlans.find(p=>p.id===e.target.value);set("provider_plan_id",plan?.id||"");set("provider_amount",plan?String(plan.price):"");set("plan_name",plan?.name||"");}} className="mt-2 w-full rounded-xl border border-slate-200 bg-white px-4 py-3">
@@ -200,10 +229,10 @@ export default function RequestService(){
     {plansError&&<p className="rounded-lg bg-amber-50 p-3 text-sm text-amber-900">Could not load live plans: {plansError}</p>}
     {!plansLoading&&!plansError&&dataPlans.length===0&&<p className="text-sm text-slate-600">No plans were returned by Pairgate. The provider catalogue endpoint must be configured before data purchases can be enabled.</p>}
    </div>}
-   {fields.filter(f=>!(isVTU&&(isInternalProviderField(f)||((kind==="data"||kind==="cable")&&f.field_key==="amount")||(kind==="data"&&f.field_key==="network")))).map(f=><label key={f.field_key} className="block text-sm font-bold">{f.label}{f.required&&<span className="text-red-500"> *</span>}{renderField(f)}</label>)}
+   {fields.filter(f=>!(isVTU&&(isInternalProviderField(f)||((kind==="data"||kind==="cable")&&f.field_key==="amount")||(kind==="data"&&f.field_key==="network")||(kind==="datapin"&&f.field_key==="network")))).map(f=><label key={f.field_key} className="block text-sm font-bold">{f.label}{f.required&&<span className="text-red-500"> *</span>}{renderField(f)}</label>)}
    {isVTU&&providerAmount>0&&<div className="rounded-2xl bg-slate-50 p-4 text-sm"><div className="flex justify-between"><span>Provider amount</span><b>₦{providerAmount.toLocaleString()}</b></div><div className="mt-2 flex justify-between"><span>Service fee</span><b>₦{serviceFee.toLocaleString()}</b></div><div className="mt-3 flex justify-between border-t pt-3 text-base"><span className="font-black">Total to pay</span><b>₦{total.toLocaleString()}</b></div></div>}
    <label className="block text-sm font-bold">Request details{!fields.length&&!isVTU&&<span className="text-red-500"> *</span>}<textarea required={!fields.length&&!isVTU} value={form.request_details??""} onChange={e=>set("request_details",e.target.value)} rows={5} className="mt-2 w-full rounded-xl border border-slate-200 px-4 py-3" placeholder="Tell us anything else we should know."/></label>
-   <button disabled={loading||(kind==="data"&&(!form.provider_plan_id||plansLoading||Boolean(plansError)))||(kind==="cable"&&(!form.provider_plan_id||!form.smartcard||cableLoading||Boolean(cableError)))} className="w-full rounded-xl bg-[#0757d5] px-5 py-3.5 font-bold text-white disabled:cursor-not-allowed disabled:opacity-60">{loading?"Submitting…":isVTU&&total>0?"Continue to payment":"Submit"}</button>
+   <button disabled={loading||(kind==="data"&&(!form.provider_plan_id||plansLoading||Boolean(plansError)))||(kind==="cable"&&(!form.provider_plan_id||!form.smartcard||cableLoading||Boolean(cableError)))||(kind==="electricity"&&(!form.provider_id||!form.meter_number||Number(form.amount)<1000||utilityLoading||Boolean(utilityError)))||(kind==="exam"&&(!form.exam_type||!Number.isInteger(Number(form.quantity))||Number(form.quantity)<1||Number(form.quantity)>10||Number(service?.price||0)<=0||utilityLoading||Boolean(utilityError)))||(kind==="datapin"&&(!form.denomination||!Number.isInteger(Number(form.quantity))||Number(form.quantity)<1||Number(form.quantity)>10||epinLoading||Boolean(epinError)))} className="w-full rounded-xl bg-[#0757d5] px-5 py-3.5 font-bold text-white disabled:cursor-not-allowed disabled:opacity-60">{loading?"Submitting…":isVTU&&total>0?"Continue to payment":"Submit"}</button>
   </form>
  </div></div></main>;
 }
