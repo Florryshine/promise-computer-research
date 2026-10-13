@@ -5,6 +5,8 @@ import {getPairgateDataPlans,pairgateRequest} from "@/lib/pairgate";
 
 const VTU_SLUGS=new Set(["airtime-recharge","data-subscription","dstv-subscription","gotv-subscription","startimes-subscription","electricity-bill","exam-pins","data-pins"]);
 const clean=(v:unknown)=>String(v??"").trim();
+const serviceFee=(amount:number,rate:number)=>Math.ceil(amount*rate/100);
+const feeRateFor=(slug:string)=>slug==="airtime-recharge"?3:slug==="data-subscription"?5:VTU_SLUGS.has(slug)?5:0;
 function rows(payload:any):any[]{
  const data=payload?.data??payload;
  if(Array.isArray(data))return data;
@@ -35,8 +37,9 @@ export async function POST(request:Request){
    const phone=clean(formData.phone_number||formData.mobile_number||formData.phone).replace(/\D/g,"");
    const airtimeAmount=Number(formData.amount||body.amount||0);
    if(!["mtn","airtel","glo","9mobile"].includes(network)||!(/^(0\d{10}|234\d{10})$/).test(phone)||airtimeAmount<50)return NextResponse.json({error:"Choose a supported network, enter a valid phone number and use at least ₦50."},{status:400});
-   finalAmount=airtimeAmount;
-   verifiedFormData={...verifiedFormData,network,phone_number:phone,provider_amount:String(airtimeAmount)};
+   const fee=serviceFee(airtimeAmount,3);
+   finalAmount=airtimeAmount+fee;
+   verifiedFormData={...verifiedFormData,network,phone_number:phone,provider_amount:String(airtimeAmount),service_fee:String(fee),service_fee_rate:"3%"};
   }
 
   if(slug==="data-subscription"){
@@ -46,8 +49,9 @@ export async function POST(request:Request){
    const plans=await getPairgateDataPlans(network);
    const selected=plans.find(plan=>String(plan.id)===selectedPlanId);
    if(!selected)return NextResponse.json({error:"That data plan is no longer available. Refresh the list and choose another."},{status:409});
-   finalAmount=selected.price;
-   verifiedFormData={...verifiedFormData,network,network_id:String(selected.networkId??""),provider_plan_id:selected.id,plan_name:selected.name,provider_amount:String(selected.price),plan_validity:selected.validity};
+   const fee=serviceFee(selected.price,5);
+   finalAmount=selected.price+fee;
+   verifiedFormData={...verifiedFormData,network,network_id:String(selected.networkId??""),provider_plan_id:selected.id,plan_name:selected.name,provider_amount:String(selected.price),plan_validity:selected.validity,service_fee:String(fee),service_fee_rate:"5%"};
   }
 
   if(["dstv-subscription","gotv-subscription","startimes-subscription"].includes(slug)){
@@ -63,8 +67,9 @@ export async function POST(request:Request){
    if(verification?.test_mode!==true&&verification?.status===false)return NextResponse.json({error:"Pairgate could not verify that smartcard/IUC number. Check the number and try again."},{status:422});
    const providerAmount=Number(plan.price);
    if(!Number.isFinite(providerAmount)||providerAmount<=0)return NextResponse.json({error:"Pairgate returned an invalid package price."},{status:502});
-   finalAmount=providerAmount+1000;
-   verifiedFormData={...verifiedFormData,provider_id:provider,provider_plan_id:planId,plan_name:String(plan.name||""),provider_amount:String(providerAmount),service_fee:"1000",smartcard,verified_customer_name:String(verification?.customer_name||"")};
+   const fee=serviceFee(providerAmount,5);
+   finalAmount=providerAmount+fee;
+   verifiedFormData={...verifiedFormData,provider_id:provider,provider_plan_id:planId,plan_name:String(plan.name||""),provider_amount:String(providerAmount),service_fee:String(fee),service_fee_rate:"5%",smartcard,verified_customer_name:String(verification?.customer_name||"")};
   }
 
   if(slug==="electricity-bill"){
@@ -78,8 +83,9 @@ export async function POST(request:Request){
    const verify=await pairgateRequest("/electricity/verify","POST",{provider_id:provider,meter_number:meterNumber,meter_type:meterType});
    const verification=verify?.data??verify;
    if(verification?.test_mode!==true&&verification?.status===false)return NextResponse.json({error:"Pairgate could not verify that meter. Check the provider, meter number and meter type."},{status:422});
-   finalAmount=purchaseAmount+500;
-   verifiedFormData={...verifiedFormData,provider_id:provider,meter_number:meterNumber,meter_type:meterType,provider_amount:String(purchaseAmount),service_fee:"500",verified_customer_name:String(verification?.customer_name||"")};
+   const fee=serviceFee(purchaseAmount,5);
+   finalAmount=purchaseAmount+fee;
+   verifiedFormData={...verifiedFormData,provider_id:provider,meter_number:meterNumber,meter_type:meterType,provider_amount:String(purchaseAmount),service_fee:String(fee),service_fee_rate:"5%",verified_customer_name:String(verification?.customer_name||"")};
   }
 
   if(slug==="exam-pins"){
@@ -89,8 +95,10 @@ export async function POST(request:Request){
    if(service.price_type!=="fixed"||Number(service.price||0)<=0)return NextResponse.json({error:"Exam PIN selling price is not configured. Set the service's fixed price per PIN before accepting payment."},{status:503});
    const providerPayload=await pairgateRequest("/providers/education");
    if(!rows(providerPayload).some((p:any)=>String(p.slug||"").toLowerCase()===provider))return NextResponse.json({error:"Pairgate does not currently list that exam provider."},{status:400});
-   finalAmount=Number(service.price)*quantity;
-   verifiedFormData={...verifiedFormData,provider_id:provider,quantity,provider_amount:String(finalAmount),unit_price:String(service.price)};
+   const providerAmount=Number(service.price)*quantity;
+   const fee=serviceFee(providerAmount,5);
+   finalAmount=providerAmount+fee;
+   verifiedFormData={...verifiedFormData,provider_id:provider,quantity,provider_amount:String(providerAmount),unit_price:String(service.price),service_fee:String(fee),service_fee_rate:"5%"};
   }
 
   if(slug==="data-pins"){
@@ -101,8 +109,10 @@ export async function POST(request:Request){
    const payload=await pairgateRequest("/recharge-pins/denominations","GET",{provider_id:network});
    const denominations=rows(payload);
    if(!denominations.some((p:any)=>Number(p.denomination??p.amount??p.value)===denomination))return NextResponse.json({error:"That denomination is not currently available for this network."},{status:409});
-   finalAmount=denomination*quantity;
-   verifiedFormData={...verifiedFormData,network,provider_id:network,denomination,quantity,provider_amount:String(finalAmount),unit_price:String(denomination)};
+   const providerAmount=denomination*quantity;
+   const fee=serviceFee(providerAmount,5);
+   finalAmount=providerAmount+fee;
+   verifiedFormData={...verifiedFormData,network,provider_id:network,denomination,quantity,provider_amount:String(providerAmount),unit_price:String(denomination),service_fee:String(fee),service_fee_rate:"5%"};
   }
 
   if(!Number.isFinite(finalAmount)||finalAmount<=0)return NextResponse.json({error:"Invalid order amount."},{status:400});
