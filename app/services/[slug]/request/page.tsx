@@ -115,6 +115,7 @@ export default function RequestService(){
 
  if(pageLoading)return <main className="section"><div className="container"><p className="text-slate-500">Loading service…</p></div></main>;
  if(!service)return <main className="section"><div className="container"><h1 className="text-2xl font-black">Service not found or unavailable</h1></div></main>;
+ if(isVTU&&!["airtime-recharge","data-subscription"].includes(params.slug))return <main className="section bg-slate-50"><div className="container"><div className="mx-auto max-w-2xl rounded-3xl bg-white p-6 shadow-soft sm:p-8"><h1 className="text-2xl font-black">Service temporarily unavailable</h1><p className="mt-3 text-slate-600">We are completing the Pairgate integration for this service. Payments are disabled for now so you are not charged before automatic delivery is ready.</p><button onClick={()=>router.push("/services")} className="mt-6 rounded-xl bg-[#0757d5] px-5 py-3 font-bold text-white">Back to services</button></div></div></main>;
 
  return <main className="section bg-slate-50"><div className="container"><div className="mx-auto max-w-2xl rounded-3xl bg-white p-6 shadow-soft sm:p-8">
   <p className="text-xs font-bold uppercase tracking-[.16em] text-[#0757d5]">Service request</p><h1 className="mt-2 text-3xl font-black">{service.title}</h1>
