@@ -59,7 +59,59 @@ export async function POST(request:Request){
       finalAmount=providerAmount+1000;
       verifiedFormData={...verifiedFormData,provider_id:provider,provider_plan_id:planId,plan_name:String(plan.name||""),provider_amount:String(providerAmount),smartcard,service_fee:"1000"};
     }
-    if(!Number.isFinite(finalAmount)||finalAmount<0)return NextResponse.json({error:"Invalid order amount."},{status:400});
+    if(["dstv-subscription","gotv-subscription","startimes-subscription"].includes(slug)){
+      const provider=slug==="dstv-subscription"?"dstv":slug==="gotv-subscription"?"gotv":"startimes";
+      const planId=String(formData.provider_plan_id||formData.plan_id||"").trim();
+      const smartcard=String(formData.smartcard||formData.smartcard_number||formData.iuc_number||"").trim();
+      if(!planId||!/^\d{6,20}$/.test(smartcard))return NextResponse.json({error:"Choose a TV package and enter a valid smartcard/IUC number."},{status:400});
+      const payload=await pairgateRequest("/cable-plans","GET",{provider_id:provider});
+      const raw=payload?.data??payload;
+      const plans=Array.isArray(raw)?raw:Object.values(raw||{}).find(Array.isArray) as any[]||[];
+      const selected=(plans||[]).find((p:any)=>String(p.plan_id??p.id)===planId);
+      if(!selected)return NextResponse.json({error:"That TV package is no longer available. Refresh the list and choose another."},{status:409});
+      const providerPrice=Number(selected.price);
+      if(!Number.isFinite(providerPrice)||providerPrice<=0)return NextResponse.json({error:"Pairgate returned an invalid package price."},{status:503});
+      finalAmount=providerPrice+1000;
+      verifiedFormData={...verifiedFormData,provider_id:provider,provider_plan_id:planId,plan_name:String(selected.name||""),provider_amount:String(providerPrice),service_fee:"1000",smartcard};
+    }
+    if(slug==="electricity-bill"){
+      const provider=String(formData.provider_id||formData.disco_id||"").trim().toLowerCase();
+      const meterNumber=String(formData.meter_number||"").trim();
+      const meterType=Number(formData.meter_type||formData.meter_type_id);
+      const purchaseAmount=Number(formData.amount||0);
+      if(!provider||!/^\d{1,20}$/.test(meterNumber)||![1,2].includes(meterType)||purchaseAmount<1000)return NextResponse.json({error:"Choose a disco, enter a valid meter number/type and use at least ₦1,000."},{status:400});
+      const payload=await pairgateRequest("/providers/electricity");
+      const raw=payload?.data??payload;
+      const providers=Array.isArray(raw)?raw:[];
+      if(!providers.some((p:any)=>String(p.slug||"").toLowerCase()===provider))return NextResponse.json({error:"Choose a valid electricity provider."},{status:400});
+      finalAmount=purchaseAmount+500;
+      verifiedFormData={...verifiedFormData,provider_id:provider,meter_number:meterNumber,meter_type:meterType,provider_amount:String(purchaseAmount),service_fee:"500"};
+    }
+    if(slug==="exam-pins"){
+      const provider=String(formData.exam_type||formData.provider_id||"").trim().toLowerCase();
+      const quantity=Number(formData.quantity||1);
+      if(!["waec","neco","nabt"].includes(provider)||!Number.isInteger(quantity)||quantity<1||quantity>10)return NextResponse.json({error:"Choose WAEC, NECO or NABTEB and a quantity from 1 to 10."},{status:400});
+      if(service.price_type!=="fixed"||Number(service.price||0)<=0)return NextResponse.json({error:"Exam PIN selling price is not configured yet. Set the service's fixed price per PIN before accepting payment."},{status:503});
+      const providersPayload=await pairgateRequest("/providers/education");
+      const raw=providersPayload?.data??providersPayload;
+      const providers=Array.isArray(raw)?raw:[];
+      if(!providers.some((p:any)=>String(p.slug||"").toLowerCase()===provider))return NextResponse.json({error:"Pairgate does not currently list that exam provider."},{status:400});
+      finalAmount=Number(service.price)*quantity;
+      verifiedFormData={...verifiedFormData,provider_id:provider,quantity,provider_amount:String(finalAmount),unit_price:String(service.price)};
+    }
+    if(slug==="data-pins"){
+      const provider=String(formData.network||formData.provider_id||"").trim().toLowerCase();
+      const denomination=Number(formData.denomination||0);
+      const quantity=Number(formData.quantity||1);
+      if(!["mtn","airtel","glo","9mobile"].includes(provider)||!Number.isInteger(quantity)||quantity<1||quantity>10)return NextResponse.json({error:"Choose a supported network and quantity from 1 to 10."},{status:400});
+      const payload=await pairgateRequest("/recharge-pins/denominations","GET",{provider_id:provider});
+      const raw=payload?.data??payload;
+      const denominations=Array.isArray(raw)?raw:Object.values(raw||{}).find(Array.isArray) as any[]||[];
+      if(!(denominations||[]).some((p:any)=>Number(p.denomination??p.amount??p.value)===denomination))return NextResponse.json({error:"That denomination is not currently available for this network."},{status:409});
+      finalAmount=denomination*quantity;
+      verifiedFormData={...verifiedFormData,network:provider,provider_id:provider,denomination,quantity,provider_amount:String(finalAmount),unit_price:String(denomination)};
+    }
+    if(!Number.isFinite(finalAmount)||finalAmount<=0)return NextResponse.json({error:"Invalid order amount."},{status:400});
 
     const reference="PCR-"+Date.now().toString().slice(-10);
     const {data:order,error:insertError}=await admin.from("orders").insert({
