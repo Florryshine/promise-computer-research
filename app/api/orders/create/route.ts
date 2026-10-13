@@ -41,7 +41,7 @@ export async function POST(request:Request){
       const provider=slug==="dstv-subscription"?"dstv":slug==="gotv-subscription"?"gotv":"startimes";
       const planId=String(formData.provider_plan_id||formData.plan_id||"").trim();
       const smartcard=String(formData.smartcard||formData.smartcard_number||formData.iuc_number||"").trim();
-      if(!planId||!/^\\d{6,20}$/.test(smartcard))return NextResponse.json({error:"Choose a TV package and enter a valid smartcard/IUC number."},{status:400});
+      if(!planId||!/^\d{6,20}$/.test(smartcard))return NextResponse.json({error:"Choose a TV package and enter a valid smartcard/IUC number."},{status:400});
       const payload=await pairgateRequest("/cable-plans","GET",{provider_id:provider});
       const data=payload?.data??payload;const planRows=Array.isArray(data)?data:Object.values(data||{}).find(Array.isArray) as any[]||[];
       const selected=(planRows||[]).find((p:any)=>String(p.plan_id??p.id)===planId);
@@ -54,7 +54,7 @@ export async function POST(request:Request){
       const meterNumber=String(formData.meter_number||"").trim();
       const meterType=Number(formData.meter_type||formData.meter_type_id);
       const purchaseAmount=Number(formData.amount||formData.provider_amount||0);
-      if(!provider||!/^\\d{1,20}$/.test(meterNumber)||![1,2].includes(meterType)||purchaseAmount<1000)return NextResponse.json({error:"Choose a disco, enter a valid meter number/type and use at least ₦1,000."},{status:400});
+      if(!provider||!/^\d{1,20}$/.test(meterNumber)||![1,2].includes(meterType)||purchaseAmount<1000)return NextResponse.json({error:"Choose a disco, enter a valid meter number/type and use at least ₦1,000."},{status:400});
       const payload=await pairgateRequest("/providers/electricity");
       const data=payload?.data??payload;const providers=Array.isArray(data)?data:[];
       if(!providers.some((p:any)=>String(p.slug||"").toLowerCase()===provider))return NextResponse.json({error:"Choose a valid electricity provider."},{status:400});
