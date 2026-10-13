@@ -208,6 +208,13 @@ async function updateFinalStatus(admin: any, order: any, transaction: any, statu
 
   if (status === "successful") {
     await admin.from("orders").update({ status: "completed", admin_note: "Pairgate confirmed the service transaction as successful." }).eq("id", order.id);
+    if (transaction.service_id === "epin") {
+      const data = response?.data ?? response;
+      const pins = Array.isArray(data?.pins) ? data.pins : [];
+      await admin.from("orders").update({
+        form_data: { ...(order.form_data || {}), pairgate_epins: pins, pairgate_epin_batch_id: clean(data?.batch_id) }
+      }).eq("id", order.id);
+    }
     const service = Array.isArray(order.services) ? order.services[0] : order.services;
     await admin.from("notifications").insert({
       user_id: order.customer_id,
@@ -336,6 +343,7 @@ export async function fulfillOrder(orderId: string) {
   const transaction = {
     request_id: rid,
     provider_reference: providerReference,
+    service_id: product.kind,
     response: result,
   };
   if (product.kind === "exam") {
