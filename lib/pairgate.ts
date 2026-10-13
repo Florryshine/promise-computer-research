@@ -207,14 +207,18 @@ async function updateFinalStatus(admin: any, order: any, transaction: any, statu
   }).eq("request_id", transaction.request_id);
 
   if (status === "successful") {
-    await admin.from("orders").update({ status: "completed", admin_note: "Pairgate confirmed the service transaction as successful." }).eq("id", order.id);
-    if (transaction.service_id === "epin") {
-      const data = response?.data ?? response;
-      const pins = Array.isArray(data?.pins) ? data.pins : [];
-      await admin.from("orders").update({
-        form_data: { ...(order.form_data || {}), pairgate_epins: pins, pairgate_epin_batch_id: clean(data?.batch_id) }
-      }).eq("id", order.id);
-    }
+    const pins = Array.isArray(providerData?.pins) ? providerData.pins : [];
+    const pinText = pins.map((item:any) => [item.pin ? "PIN: " + item.pin : "", item.serial ? "Serial: " + item.serial : "", item.denomination ? "Denomination: ₦" + item.denomination : ""].filter(Boolean).join(" | ")).join("\\n");
+    const deliveredPin = clean(first(providerData, "pin", "token", "electricity_token"));
+    const updatedForm = {
+      ...(order.form_data || {}),
+      ...(deliveredPin ? { delivery_pin: deliveredPin } : {}),
+      ...(pinText ? { delivery_pins: pinText } : {}),
+      ...(clean(first(providerData, "batch_id")) ? { delivery_batch_id: clean(first(providerData, "batch_id")) } : {}),
+      delivery_status_message: providerMessage,
+      delivery_completed_at: clean(first(providerData, "completed_at")) || new Date().toISOString(),
+    };
+    await admin.from("orders").update({ status: "completed", admin_note: "Pairgate confirmed the service transaction as successful.", form_data: updatedForm }).eq("id", order.id);
     const service = Array.isArray(order.services) ? order.services[0] : order.services;
     await admin.from("notifications").insert({
       user_id: order.customer_id,
