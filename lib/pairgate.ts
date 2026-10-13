@@ -256,12 +256,14 @@ export async function fulfillOrder(orderId: string) {
   const product = normalize(order);
   if (!product) return markNeedsAttention(admin, order, "This service is not yet enabled in the Pairgate adapter. Airtime and mobile data are supported in this integration pass; other services need their exact Pairgate fields/catalogues before automation.");
 
+  const phoneKind = product.kind === "airtime" || product.kind === "data";
   const problem =
     !Number.isFinite(product.amount) || product.amount <= 0 ? "A valid provider purchase amount is missing." :
-    !product.network ? "Pairgate network slug is missing." :
-    !/^0\d{10}$|^234\d{10}$/.test(product.phone) ? "Recipient phone number must be 11 digits starting with 0 or 13 digits starting with 234." :
+    phoneKind && !product.network ? "Pairgate network slug is missing." :
+    phoneKind && !/^0\d{10}$|^234\d{10}$/.test(product.phone) ? "Recipient phone number must be 11 digits starting with 0 or 13 digits starting with 234." :
     product.kind === "airtime" && product.amount < 50 ? "Pairgate airtime minimum is ₦50." :
-    product.kind === "data" && !product.plan ? "Pairgate data plan ID is missing." : "";
+    product.kind === "data" && !product.plan ? "Pairgate data plan ID is missing." :
+    product.kind === "cable" && (!product.plan || !/^\d{6,20}$/.test(product.smartcard)) ? "A valid TV package and smartcard/IUC number are required." : "";
   if (problem) return markNeedsAttention(admin, order, problem);
 
   const rid = requestId(order);
@@ -288,14 +290,13 @@ export async function fulfillOrder(orderId: string) {
   let result: any;
   try {
     result = await pairgateRequest(
-      product.kind === "airtime" ? "/airtime/purchase" : "/data/purchase",
+      product.kind === "airtime" ? "/airtime/purchase" : product.kind === "data" ? "/data/purchase" : "/cable/purchase",
       "POST",
-      {
-        provider_id: product.network,
-        ...(product.kind === "data" ? { plan_id: product.plan } : { amount: product.amount }),
-        recipient: product.phone,
-        reference: rid,
-      },
+      product.kind === "airtime"
+        ? { provider_id: product.network, amount: product.amount, recipient: product.phone, reference: rid }
+        : product.kind === "data"
+        ? { provider_id: product.network, plan_id: product.plan, recipient: product.phone, reference: rid }
+        : { provider_id: product.provider, plan_id: product.plan, smartcard: product.smartcard, recipient_name: product.recipientName || "Unknown Customer", reference: rid },
     );
   } catch (error) {
     const message = error instanceof Error ? error.message : "Pairgate request failed.";
