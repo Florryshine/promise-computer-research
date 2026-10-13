@@ -1,5 +1,5 @@
-import NifexHealth from '../VTUTelecomHealth';
+import PairgateHealth from '../VTUTelecomHealth';
 
 export default function VTUAdminPage() {
-  return <div><NifexHealth /></div>;
+  return <div><PairgateHealth /></div>;
 }
