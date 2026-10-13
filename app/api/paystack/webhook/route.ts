@@ -1,7 +1,7 @@
 import crypto from 'crypto';
 import { NextResponse } from 'next/server';
 import { createAdminClient } from '@/lib/supabase/admin';
-import { fulfillOrder } from '@/lib/vtpass';
+import { fulfillOrder } from '@/lib/pairgate';
 import { checkPaystackAmount } from '@/lib/paystack';
 
 export async function POST(request: Request) {

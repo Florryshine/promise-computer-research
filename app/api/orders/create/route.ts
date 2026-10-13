@@ -1,7 +1,7 @@
 import {NextResponse} from "next/server";
 import {createClient} from "@/lib/supabase/server";
 import {createAdminClient} from "@/lib/supabase/admin";
-import {getNifexDataPlans} from "@/lib/nifex-catalog";
+import {getPairgateDataPlans} from "@/lib/pairgate";
 
 const VTU_SLUGS=new Set(["airtime-recharge","data-subscription","dstv-subscription","gotv-subscription","startimes-subscription","electricity-bill","exam-pins","data-pins"]);
 
@@ -22,6 +22,7 @@ export async function POST(request:Request){
     const {data:service,error:serviceError}=await admin.from("services").select("id,slug,title,price,price_type,active").eq("slug",slug).eq("active",true).maybeSingle();
     if(serviceError)throw serviceError;
     if(!service)return NextResponse.json({error:"This service is no longer available."},{status:404});
+    if(VTU_SLUGS.has(slug)&&!["airtime-recharge","data-subscription"].includes(slug))return NextResponse.json({error:"This service is temporarily unavailable while Pairgate integration is completed. Please do not pay for this service yet."},{status:503});
 
     let finalAmount=VTU_SLUGS.has(slug) ? amount : service.price_type==="fixed" ? Number(service.price||0) : 0;
     let verifiedFormData:Record<string,any>={...formData};
@@ -31,9 +32,9 @@ export async function POST(request:Request){
       const selectedPlanId=String(formData.provider_plan_id||formData.plan_id||"").trim();
       if(!network||!selectedPlanId)return NextResponse.json({error:"Choose a network and data plan."},{status:400});
       let plans;
-      try { plans=await getNifexDataPlans(network); }
+      try { plans=await getPairgateDataPlans(network); }
       catch(error) {
-        const message=error instanceof Error?error.message:"Nifex catalogue is unavailable.";
+        const message=error instanceof Error?error.message:"Pairgate catalogue is unavailable.";
         return NextResponse.json({error:message},{status:503});
       }
       const selected=plans.find(plan=>String(plan.id)===selectedPlanId);

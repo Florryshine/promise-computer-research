@@ -49,7 +49,7 @@ export default function RequestService(){
   let cancelled=false;
   setPlansLoading(true);setPlansError("");setDataPlans([]);
   setForm(current=>({...current,provider_plan_id:"",provider_amount:"",plan_name:"",plan_validity:""}));
-  fetch("/api/nifex/data-plans?network="+encodeURIComponent(form.network||"mtn"),{cache:"no-store"})
+  fetch("/api/pairgate/data-plans?network="+encodeURIComponent(form.network||"mtn"),{cache:"no-store"})
    .then(async response=>{const body=await response.json();if(!response.ok)throw new Error(body.error||"Could not load data plans.");return body;})
    .then(body=>{if(!cancelled)setDataPlans(Array.isArray(body.plans)?body.plans:[]);})
    .catch(err=>{if(!cancelled)setPlansError(err instanceof Error?err.message:"Could not load data plans.");})
@@ -115,6 +115,7 @@ export default function RequestService(){
 
  if(pageLoading)return <main className="section"><div className="container"><p className="text-slate-500">Loading service…</p></div></main>;
  if(!service)return <main className="section"><div className="container"><h1 className="text-2xl font-black">Service not found or unavailable</h1></div></main>;
+ if(isVTU&&!["airtime-recharge","data-subscription"].includes(params.slug))return <main className="section bg-slate-50"><div className="container"><div className="mx-auto max-w-2xl rounded-3xl bg-white p-6 shadow-soft sm:p-8"><h1 className="text-2xl font-black">Service temporarily unavailable</h1><p className="mt-3 text-slate-600">We are completing the Pairgate integration for this service. Payments are disabled for now so you are not charged before automatic delivery is ready.</p><button onClick={()=>router.push("/services")} className="mt-6 rounded-xl bg-[#0757d5] px-5 py-3 font-bold text-white">Back to services</button></div></div></main>;
 
  return <main className="section bg-slate-50"><div className="container"><div className="mx-auto max-w-2xl rounded-3xl bg-white p-6 shadow-soft sm:p-8">
   <p className="text-xs font-bold uppercase tracking-[.16em] text-[#0757d5]">Service request</p><h1 className="mt-2 text-3xl font-black">{service.title}</h1>
@@ -135,7 +136,7 @@ export default function RequestService(){
      </select>
     </label>
     {plansError&&<p className="rounded-lg bg-amber-50 p-3 text-sm text-amber-900">Could not load live plans: {plansError}</p>}
-    {!plansLoading&&!plansError&&dataPlans.length===0&&<p className="text-sm text-slate-600">No plans were returned by Nifex. The provider catalogue endpoint must be configured before data purchases can be enabled.</p>}
+    {!plansLoading&&!plansError&&dataPlans.length===0&&<p className="text-sm text-slate-600">No plans were returned by Pairgate. The provider catalogue endpoint must be configured before data purchases can be enabled.</p>}
    </div>}
    {fields.filter(f=>!(isVTU&&(["provider_plan_id","plan_id","plan_code","variation_code","package","provider_amount","network_id","cablename_id","cable_provider_id","cableplan_id","disco_id","meter_type_id","provider_id","data_plan_id"].includes(f.field_key)||((kind==="data"||kind==="cable")&&f.field_key==="amount")||(kind==="data"&&f.field_key==="network")))).map(f=><label key={f.field_key} className="block text-sm font-bold">{f.label}{f.required&&<span className="text-red-500"> *</span>}{renderField(f)}</label>)}
    {isVTU&&providerAmount>0&&<div className="rounded-2xl bg-slate-50 p-4 text-sm"><div className="flex justify-between"><span>Provider amount</span><b>₦{providerAmount.toLocaleString()}</b></div><div className="mt-2 flex justify-between"><span>Service fee</span><b>₦{serviceFee.toLocaleString()}</b></div><div className="mt-3 flex justify-between border-t pt-3 text-base"><span className="font-black">Total to pay</span><b>₦{total.toLocaleString()}</b></div></div>}
