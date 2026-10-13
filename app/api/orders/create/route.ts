@@ -22,7 +22,7 @@ export async function POST(request:Request){
     const {data:service,error:serviceError}=await admin.from("services").select("id,slug,title,price,price_type,active").eq("slug",slug).eq("active",true).maybeSingle();
     if(serviceError)throw serviceError;
     if(!service)return NextResponse.json({error:"This service is no longer available."},{status:404});
-    if(VTU_SLUGS.has(slug)&&!["airtime-recharge","data-subscription","dstv-subscription","gotv-subscription","startimes-subscription"].includes(slug))return NextResponse.json({error:"This service is temporarily unavailable while its Pairgate integration is completed. Please do not pay yet."},{status:503});
+    
 
     let finalAmount=VTU_SLUGS.has(slug) ? amount : service.price_type==="fixed" ? Number(service.price||0) : 0;
     let verifiedFormData:Record<string,any>={...formData};
@@ -43,21 +43,6 @@ export async function POST(request:Request){
       // never trusted from the browser.
       finalAmount=selected.price;
       verifiedFormData={...verifiedFormData,network,network_id:String(selected.networkId??""),provider_plan_id:selected.id,plan_name:selected.name,provider_amount:String(selected.price),plan_validity:selected.validity};
-    }
-    if(["dstv-subscription","gotv-subscription","startimes-subscription"].includes(slug)){
-      const provider=slug==="dstv-subscription"?"dstv":slug==="gotv-subscription"?"gotv":"startimes";
-      const planId=String(formData.provider_plan_id||"").trim();
-      const smartcard=String(formData.smartcard||formData.smartcard_number||formData.iuc_number||"").trim();
-      if(!planId||!/^\\d{6,20}$/.test(smartcard))return NextResponse.json({error:"Choose a package and enter a valid smartcard/IUC number."},{status:400});
-      const payload=await pairgateRequest("/cable-plans","GET",{provider_id:provider});
-      const data=payload?.data??payload;
-      const rows=Array.isArray(data)?data:Object.values(data||{}).find(Array.isArray)||[];
-      const plan=(rows as any[]).find(row=>String(row.plan_id??row.id)===planId);
-      if(!plan)return NextResponse.json({error:"That TV package is no longer available. Refresh and choose another."},{status:409});
-      const providerAmount=Number(plan.price);
-      if(!Number.isFinite(providerAmount)||providerAmount<=0)return NextResponse.json({error:"Pairgate returned an invalid package price."},{status:502});
-      finalAmount=providerAmount+1000;
-      verifiedFormData={...verifiedFormData,provider_id:provider,provider_plan_id:planId,plan_name:String(plan.name||""),provider_amount:String(providerAmount),smartcard,service_fee:"1000"};
     }
     if(["dstv-subscription","gotv-subscription","startimes-subscription"].includes(slug)){
       const provider=slug==="dstv-subscription"?"dstv":slug==="gotv-subscription"?"gotv":"startimes";
