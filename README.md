@@ -38,13 +38,15 @@ Those belong to Build 3/4.
 ## Important
 The SQL schema uses customer-only RLS policies. Admin policies and admin UI are intentionally reserved for the next build. Do not disable RLS in production.
 
-## Nifex live data-plan catalogue
+## Pairgate VTU integration
 
-The data request form uses the server route `/api/nifex/data-plans` and validates the selected plan and price again on the server before creating a paid order.
+Airtime and mobile-data fulfilment use the server-side Pairgate adapter in `lib/pairgate.ts`. The data request form loads plans through `/api/pairgate/data-plans`; the order-creation route fetches the catalogue again and derives the plan ID and provider price on the server rather than trusting the browser.
 
 Required Vercel environment variables:
-- `NIFEX_API_KEY` — Nifex API token (server-side only).
-- `NIFEX_DATA_PLANS_PATH` — the exact relative GET path for listing active data plans, confirmed by Nifex support. Do not guess this path.
-- `NIFEX_BASE_URL` — optional; defaults to `https://nifexdataapp.com.ng/api/`.
+- `PAIRGATE_API_KEY` — Pairgate API key; server-side only, never use a `NEXT_PUBLIC_` prefix.
+- `PAIRGATE_BASE_URL` — optional; defaults to `https://pairgate.com/api/v1`.
+- `PAIRGATE_TEST_MODE` — defaults to `true`; requests use Pairgate's documented `/test` endpoints while true. Set to `false` only after confirming test responses and approving live fulfilment.
 
-The API documentation supplied for this project documents `POST /data/` but does not document a data-plan listing endpoint. Until Nifex confirms the catalogue path and response schema, the plan selector intentionally reports that live plans are unavailable and checkout cannot proceed. This prevents customer-supplied plan IDs or prices from being trusted.
+The integration currently automates airtime and data purchases. Cable TV, electricity, exam pins and data pins must remain unavailable for automatic fulfilment until their Pairgate-specific forms, verification/catalogue endpoints, and request fields have been implemented and tested. Paystack remains the customer payment gateway; Pairgate is the fulfilment provider.
+
+Pairgate documentation: `https://pairgate.com/developers`.
