@@ -3,6 +3,7 @@ import { createAdminClient } from "@/lib/supabase/admin";
 
 const BASE_URL = (process.env.PAIRGATE_BASE_URL || "https://pairgate.com/api/v1").replace(/\/+$/, "");
 const API_KEY = (process.env.PAIRGATE_API_KEY || "").trim();
+const TEST_MODE = (process.env.PAIRGATE_TEST_MODE || "true").toLowerCase() === "true";
 
 function clean(value: unknown) { return String(value ?? "").trim(); }
 function first(object: any, ...keys: string[]) {
@@ -210,7 +211,7 @@ async function checkPendingTransaction(admin: any, order: any, transaction: any)
   }
   try {
     const result = await pairgateRequest("/transaction/status", "GET", { reference_code: referenceCode });
-    const status = statusOf(result);
+    const status = result?.data?.test_mode === true ? "pending" : statusOf(result);
     await updateFinalStatus(admin, order, transaction, status, result);
     return { status, result, message: status === "pending" ? "Pairgate transaction is still processing. It was not resubmitted." : "Pairgate transaction status checked: " + status + "." };
   } catch (error) {
@@ -242,7 +243,7 @@ export async function fulfillOrder(orderId: string) {
   const { data: existing, error: existingError } = await admin.from("provider_transactions").select("*").eq("request_id", rid).maybeSingle();
   if (existingError) throw existingError;
   if (existing?.status === "successful") return { status: "successful", message: "Already fulfilled.", transaction: existing };
-  if (existing && existing.response && Object.keys(existing.response).length > 0 && existing.status !== "failed") {
+  if (existing && existing.response && Object.keys(existing.response).length > 0) {
     return checkPendingTransaction(admin, order, existing);
   }
 
