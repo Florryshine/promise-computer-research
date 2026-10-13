@@ -22,6 +22,7 @@ export async function POST(request:Request){
     const {data:service,error:serviceError}=await admin.from("services").select("id,slug,title,price,price_type,active").eq("slug",slug).eq("active",true).maybeSingle();
     if(serviceError)throw serviceError;
     if(!service)return NextResponse.json({error:"This service is no longer available."},{status:404});
+    if(VTU_SLUGS.has(slug)&&!["airtime-recharge","data-subscription"].includes(slug))return NextResponse.json({error:"This service is temporarily unavailable while Pairgate integration is completed. Please do not pay for this service yet."},{status:503});
 
     let finalAmount=VTU_SLUGS.has(slug) ? amount : service.price_type==="fixed" ? Number(service.price||0) : 0;
     let verifiedFormData:Record<string,any>={...formData};
