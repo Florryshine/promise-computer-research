@@ -338,6 +338,18 @@ export async function fulfillOrder(orderId: string) {
     provider_reference: providerReference,
     response: result,
   };
+  if (product.kind === "exam") {
+    const details = Array.isArray(nested?.details) ? nested.details : [];
+    const children = details.map((item: any) => clean(item.reference)).filter(Boolean);
+    for (const childReference of children) {
+      await admin.from("provider_transactions").upsert({
+        order_id: order.id, provider: "pairgate", request_id: childReference,
+        provider_reference: childReference, service_id: "exam-pin", amount: Number(nested?.unit_price || product.amount / product.quantity),
+        status: "pending", provider_status: "pending", request_data: { provider: product.provider, parent_reference: rid },
+        response: { parent_reference: rid }
+      }, { onConflict: "request_id" });
+    }
+  }
   await updateFinalStatus(admin, order, transaction, status, result);
   if (status === "pending") {
     await admin.from("orders").update({
