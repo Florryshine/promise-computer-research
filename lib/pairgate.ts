@@ -162,7 +162,15 @@ function requestId(order: any) {
     crypto.createHash("sha1").update(order.id).digest("hex").slice(0, 10);
 }
 
-function normalize(order: any) {
+type PairgateProduct =
+  | { kind: "airtime"; network: string | null; phone: string; amount: number }
+  | { kind: "data"; network: string | null; phone: string; plan: string; amount: number }
+  | { kind: "cable"; provider: string; plan: string; smartcard: string; recipientName: string; amount: number }
+  | { kind: "electricity"; provider: string; meterNumber: string; meterType: number; recipientName: string; amount: number }
+  | { kind: "exam"; provider: string; quantity: number; amount: number }
+  | { kind: "epin"; network: string | null; denomination: number; quantity: number; amount: number };
+
+function normalize(order: any): PairgateProduct | null {
   const service = Array.isArray(order.services) ? order.services[0] : order.services;
   const slug = String(service?.slug || "");
   const form = (order.form_data || {}) as Record<string, any>;
