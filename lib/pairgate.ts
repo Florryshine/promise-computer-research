@@ -179,6 +179,9 @@ function normalize(order: any) {
     const provider = slug === "dstv-subscription" ? "dstv" : slug === "gotv-subscription" ? "gotv" : "startimes";
     return { kind: "cable", provider, plan: clean(form.provider_plan_id || form.plan_id), smartcard: clean(form.smartcard || form.smartcard_number || form.iuc_number), recipientName: clean(form.full_name || form.recipient_name), amount: Number(form.provider_amount || 0) };
   }
+  if (slug === "electricity-bill") return { kind: "electricity", provider: clean(form.provider_id || form.disco_id), meterNumber: clean(form.meter_number), meterType: Number(form.meter_type || form.meter_type_id), recipientName: clean(form.full_name || form.recipient_name), amount: Number(form.provider_amount || form.amount || 0) };
+  if (slug === "exam-pins") return { kind: "exam", provider: clean(form.exam_type || form.provider_id).toLowerCase(), quantity: Number(form.quantity || 1), amount: Number(form.provider_amount || order.amount || 0) };
+  if (slug === "data-pins") return { kind: "epin", network: networkSlug(form.network || form.provider_id), denomination: Number(form.denomination || 0), quantity: Number(form.quantity || 1), amount: Number(form.provider_amount || order.amount || 0) };
   return null;
 }
 
@@ -263,7 +266,10 @@ export async function fulfillOrder(orderId: string) {
     phoneKind && !/^0\d{10}$|^234\d{10}$/.test(product.phone) ? "Recipient phone number must be 11 digits starting with 0 or 13 digits starting with 234." :
     product.kind === "airtime" && product.amount < 50 ? "Pairgate airtime minimum is ₦50." :
     product.kind === "data" && !product.plan ? "Pairgate data plan ID is missing." :
-    product.kind === "cable" && (!product.plan || !/^\d{6,20}$/.test(product.smartcard)) ? "A valid TV package and smartcard/IUC number are required." : "";
+    product.kind === "cable" && (!product.plan || !/^\d{6,20}$/.test(product.smartcard)) ? "A valid TV package and smartcard/IUC number are required." :
+    product.kind === "electricity" && (!product.provider || !/^\d{1,20}$/.test(product.meterNumber) || ![1,2].includes(product.meterType) || product.amount < 1000) ? "A valid disco, meter number/type and amount of at least ₦1,000 are required." :
+    product.kind === "exam" && (!["waec","neco","nabt"].includes(product.provider) || !Number.isInteger(product.quantity) || product.quantity < 1 || product.quantity > 10) ? "Choose a supported exam body and quantity from 1 to 10." :
+    product.kind === "epin" && (!product.network || ![100,200,500,1000,2000,5000,10000,20000].includes(product.denomination) || !Number.isInteger(product.quantity) || product.quantity < 1 || product.quantity > 10) ? "Choose a supported network, denomination and quantity from 1 to 10." : "";
   if (problem) return markNeedsAttention(admin, order, problem);
 
   const rid = requestId(order);
@@ -289,15 +295,19 @@ export async function fulfillOrder(orderId: string) {
 
   let result: any;
   try {
-    result = await pairgateRequest(
-      product.kind === "airtime" ? "/airtime/purchase" : product.kind === "data" ? "/data/purchase" : "/cable/purchase",
-      "POST",
-      product.kind === "airtime"
-        ? { provider_id: product.network, amount: product.amount, recipient: product.phone, reference: rid }
-        : product.kind === "data"
-        ? { provider_id: product.network, plan_id: product.plan, recipient: product.phone, reference: rid }
-        : { provider_id: product.provider, plan_id: product.plan, smartcard: product.smartcard, recipient_name: product.recipientName || "Unknown Customer", reference: rid },
-    );
+    const endpoints: Record<string,string> = { airtime:"/airtime/purchase", data:"/data/purchase", cable:"/cable/purchase", electricity:"/electricity/purchase", exam:"/education/purchase", epin:"/epin/purchase" };
+    const requestBody: Record<string,unknown> = product.kind === "airtime"
+      ? { provider_id: product.network, amount: product.amount, recipient: product.phone, reference: rid }
+      : product.kind === "data"
+      ? { provider_id: product.network, plan_id: product.plan, recipient: product.phone, reference: rid }
+      : product.kind === "cable"
+      ? { provider_id: product.provider, plan_id: product.plan, smartcard: product.smartcard, recipient_name: product.recipientName || "Unknown Customer", reference: rid }
+      : product.kind === "electricity"
+      ? { provider_id: product.provider, amount: product.amount, meter_number: product.meterNumber, meter_type: product.meterType, recipient_name: product.recipientName || "Unknown Customer", reference: rid }
+      : product.kind === "exam"
+      ? { provider_id: product.provider, quantity: product.quantity, reference: rid }
+      : { provider_id: product.network, quantity: product.quantity, denomination: product.denomination, reference: rid };
+    result = await pairgateRequest(endpoints[product.kind], "POST", requestBody);
   } catch (error) {
     const message = error instanceof Error ? error.message : "Pairgate request failed.";
     const ambiguous = message.startsWith("PAIRGATE_NETWORK_AMBIGUOUS") || /PAIRGATE_HTTP_5\d\d/.test(message);
