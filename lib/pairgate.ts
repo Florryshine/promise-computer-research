@@ -98,7 +98,7 @@ async function catalogueRequest(path: string, params?: Record<string, unknown>) 
   } catch (error) {
     const message = error instanceof Error ? error.message : "";
     if (!message.includes("PAIRGATE_HTTP_429")) throw error;
-    const seconds = Number(message.match(/wait\\s+(\\d+)\\s+seconds?/i)?.[1] || 2);
+    const seconds = Number(message.match(/wait\s+(\d+)\s+seconds?/i)?.[1] || 2);
     // Pairgate explicitly rate-limits catalogue requests. Wait beyond its requested window, then retry once.
     await new Promise(resolve => setTimeout(resolve, Math.max(1500, seconds * 1000 + 500)));
     return await pairgateRequest(path, "GET", params);
@@ -147,7 +147,7 @@ export async function getPairgateDataPlans(networkInput?: string): Promise<Pairg
         id, networkId: wanted,
         network: ({ mtn: "MTN", airtel: "Airtel", glo: "Glo", "9mobile": "9mobile" } as Record<string, string>)[wanted],
         name, price,
-        validity: duration === "" ? "" : /^\\d+$/.test(clean(duration)) ? clean(duration) + " days" : clean(duration),
+        validity: duration === "" ? "" : /^\d+$/.test(clean(duration)) ? clean(duration) + " days" : clean(duration),
         planType,
       });
     }
