@@ -42,6 +42,11 @@ export async function pairgateRequest(path: string, method: "GET" | "POST" = "GE
   let response: Response;
   try {
     response = await fetch(url, options);
+    // Pairgate can enforce a two-second request interval. Honour its 429 response once.
+    if (response.status === 429) {
+      await new Promise(resolve => setTimeout(resolve, 2200));
+      response = await fetch(url, options);
+    }
   } catch (error) {
     const message = error instanceof Error ? error.message : "Network error";
     throw new Error("PAIRGATE_NETWORK_AMBIGUOUS: " + message);
@@ -115,11 +120,14 @@ export async function getPairgateDataPlans(networkInput?: string): Promise<Pairg
   const planTypes = [...new Set(matchingTypes)];
   if (!planTypes.length) throw new Error("Pairgate returned no data-plan categories for " + wanted + ".");
 
-  const results = await Promise.all(planTypes.map(async (rawPlanType: unknown) => {
-    // Set/array inference can leave this value as unknown; normalize it before using it in the API request and returned plan.
+  const results: PairgateDataPlan[][] = [];
+  // Fetch plan types sequentially: parallel requests can trigger Pairgate's 2-second rate limit.
+  for (let index = 0; index < planTypes.length; index++) {
+    if (index > 0) await new Promise(resolve => setTimeout(resolve, 2200));
+    const rawPlanType: unknown = planTypes[index];
     const planType: string = clean(rawPlanType).toUpperCase();
     const payload = await pairgateRequest("/data-plans", "GET", { provider_id: wanted, plan_type: planType });
-    return dataRows(payload, wanted).map((row: any): PairgateDataPlan | null => {
+    const plans = dataRows(payload, wanted).map((row: any): PairgateDataPlan | null => {
       const id = clean(first(row, "plan_id", "id", "planId"));
       const name = clean(first(row, "name", "plan_name", "title"));
       const price = Number(first(row, "price", "amount", "selling_price"));
@@ -135,7 +143,8 @@ export async function getPairgateDataPlans(networkInput?: string): Promise<Pairg
         planType,
       };
     }).filter((plan: PairgateDataPlan | null): plan is PairgateDataPlan => Boolean(plan));
-  }));
+    results.push(plans);
+  }
 
   const unique = new Map<string, PairgateDataPlan>();
   for (const plan of results.flat()) unique.set(plan.id, plan);
