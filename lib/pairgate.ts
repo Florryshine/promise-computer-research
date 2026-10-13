@@ -59,6 +59,14 @@ export async function pairgateRequest(path: string, method: "GET" | "POST" = "GE
   return payload;
 }
 
+function normalizePhone(value: unknown): string {
+  const digits = clean(value).replace(/\\D/g, "");
+  if (digits.length === 11 && digits.startsWith("0")) return digits;
+  if (digits.length === 13 && digits.startsWith("234")) return digits;
+  if (digits.length === 10) return "0" + digits;
+  return digits;
+}
+
 function networkSlug(value: unknown): string | null {
   const v = clean(value).toLowerCase().replace(/\s+/g, "");
   if (["mtn", "airtel", "glo", "9mobile"].includes(v)) return v;
@@ -141,7 +149,7 @@ function normalize(order: any) {
   const service = Array.isArray(order.services) ? order.services[0] : order.services;
   const slug = String(service?.slug || "");
   const form = (order.form_data || {}) as Record<string, any>;
-  const phone = clean(form.mobile_number || form.phone_number || form.phone);
+  const phone = normalizePhone(form.mobile_number || form.phone_number || form.phone);
   if (slug === "airtime-recharge") {
     const amount = Number(form.provider_amount || form.amount || order.amount);
     return { kind: "airtime", network: networkSlug(form.network_id || form.network), phone, amount };
@@ -236,7 +244,7 @@ export async function fulfillOrder(orderId: string) {
   const problem =
     !Number.isFinite(product.amount) || product.amount <= 0 ? "A valid provider purchase amount is missing." :
     !product.network ? "Pairgate network slug is missing." :
-    !product.phone ? "Recipient phone number is missing." :
+    !/^0\\d{10}$|^234\\d{10}$/.test(product.phone) ? "Recipient phone number must be 11 digits starting with 0 or 13 digits starting with 234." :
     product.kind === "airtime" && product.amount < 50 ? "Pairgate airtime minimum is ₦50." :
     product.kind === "data" && !product.plan ? "Pairgate data plan ID is missing." : "";
   if (problem) return markNeedsAttention(admin, order, problem);
