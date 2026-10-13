@@ -6,11 +6,13 @@ import {createClient} from "@/lib/supabase/client";
 
 type ServiceField={field_key:string;label:string;field_type:string;placeholder:string|null;required:boolean;options:any;sort_order:number};
 type DataPlan={id:string;networkId:number|null;network:string;name:string;price:number;validity:string};
+type UtilityProvider={id:string;name:string};
+type EpinDenomination={value:number;label:string};
 
 const VTU_SLUGS=new Set(["airtime-recharge","data-subscription","dstv-subscription","gotv-subscription","startimes-subscription","electricity-bill","exam-pins","data-pins"]);
 const FEE:Record<string,number>={airtime:0,data:0,cable:1000,electricity:500,exam:0,datapin:0};
 
-const INTERNAL_PROVIDER_FIELDS=new Set(["provider_plan_id","plan_id","plan_code","variation_code","package","provider_amount","network_id","cablename_id","cable_provider_id","cableplan_id","disco_id","meter_type_id","provider_id","data_plan_id","nifex_data_plan_id","nifex_plan_id","nifex_data_plan","nifex_plan_code"]);
+const INTERNAL_PROVIDER_FIELDS=new Set(["provider_plan_id","plan_id","plan_code","variation_code","package","provider_amount","network_id","cablename_id","cable_provider_id","cableplan_id","disco_id","meter_type_id","provider_id","data_plan_id","nifex_data_plan_id","nifex_plan_id","nifex_data_plan","nifex_plan_code","meter_number","meter_type","exam_type","quantity","denomination"]);
 function isInternalProviderField(field:ServiceField){
  const key=String(field.field_key||"").toLowerCase().replace(/[\s-]+/g,"_");
  const label=String(field.label||"").toLowerCase();
@@ -25,6 +27,8 @@ export default function RequestService(){
  const [loading,setLoading]=useState(false),[pageLoading,setPageLoading]=useState(true),[error,setError]=useState("");
  const [dataPlans,setDataPlans]=useState<DataPlan[]>([]),[plansLoading,setPlansLoading]=useState(false),[plansError,setPlansError]=useState("");
  const [cablePlans,setCablePlans]=useState<DataPlan[]>([]),[cableLoading,setCableLoading]=useState(false),[cableError,setCableError]=useState("");
+ const [utilityProviders,setUtilityProviders]=useState<UtilityProvider[]>([]),[utilityLoading,setUtilityLoading]=useState(false),[utilityError,setUtilityError]=useState("");
+ const [epinDenominations,setEpinDenominations]=useState<EpinDenomination[]>([]),[epinLoading,setEpinLoading]=useState(false),[epinError,setEpinError]=useState("");
 
  const isVTU=VTU_SLUGS.has(params.slug);
  const kind=params.slug==="airtime-recharge"?"airtime":params.slug==="data-subscription"?"data":["dstv-subscription","gotv-subscription","startimes-subscription"].includes(params.slug)?"cable":params.slug==="electricity-bill"?"electricity":params.slug==="exam-pins"?"exam":params.slug==="data-pins"?"datapin":"";
@@ -55,6 +59,31 @@ export default function RequestService(){
  })();},[params.slug,router]);
 
  useEffect(()=>{
+  if(kind!=="electricity"&&kind!=="exam")return;
+  const catalogueKind=kind==="electricity"?"electricity":"education";
+  let cancelled=false;
+  setUtilityLoading(true);setUtilityError("");setUtilityProviders([]);
+  fetch("/api/pairgate/catalogue?kind="+catalogueKind,{cache:"no-store"})
+   .then(async response=>{const body=await response.json();if(!response.ok)throw new Error(body.error||"Could not load providers.");return body;})
+   .then(body=>{if(!cancelled)setUtilityProviders(Array.isArray(body.providers)?body.providers:[]);})
+   .catch(err=>{if(!cancelled)setUtilityError(err instanceof Error?err.message:"Could not load providers.");})
+   .finally(()=>{if(!cancelled)setUtilityLoading(false);});
+  return ()=>{cancelled=true;};
+ },[kind]);
+
+ useEffect(()=>{
+  if(kind!=="datapin"||!form.network)return;
+  let cancelled=false;
+  setEpinLoading(true);setEpinError("");setEpinDenominations([]);
+  fetch("/api/pairgate/catalogue?kind=epin&provider="+encodeURIComponent(form.network),{cache:"no-store"})
+   .then(async response=>{const body=await response.json();if(!response.ok)throw new Error(body.error||"Could not load recharge PIN denominations.");return body;})
+   .then(body=>{if(!cancelled)setEpinDenominations(Array.isArray(body.denominations)?body.denominations:[]);})
+   .catch(err=>{if(!cancelled)setEpinError(err instanceof Error?err.message:"Could not load denominations.");})
+   .finally(()=>{if(!cancelled)setEpinLoading(false);});
+  return ()=>{cancelled=true;};
+ },[kind,form.network]);
+
+ useEffect(()=>{
   if(kind!=="cable")return;
   const provider=params.slug==="dstv-subscription"?"dstv":params.slug==="gotv-subscription"?"gotv":"startimes";
   let cancelled=false;
@@ -82,7 +111,7 @@ export default function RequestService(){
 
 
 
-  const providerAmount=["airtime","electricity","exam","datapin"].includes(kind)?Number(form.amount||0):Number(form.provider_amount||0);
+  const providerAmount=kind==="exam"?Number(service?.price||0)*Number(form.quantity||1):kind==="datapin"?Number(form.denomination||0)*Number(form.quantity||1):["airtime","electricity"].includes(kind)?Number(form.amount||0):Number(form.provider_amount||0);
  const serviceFee=FEE[kind]||0;
  const total=providerAmount+serviceFee;
 
