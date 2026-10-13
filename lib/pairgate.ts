@@ -92,6 +92,19 @@ function dataRows(payload: any, wantedNetwork: string): any[] {
   return [];
 }
 
+async function catalogueRequest(path: string, params?: Record<string, unknown>) {
+  try {
+    return await pairgateRequest(path, "GET", params);
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "";
+    if (!message.includes("PAIRGATE_HTTP_429")) throw error;
+    const seconds = Number(message.match(/wait\s+(\d+)\s+seconds?/i)?.[1] || 2);
+    // Pairgate explicitly rate-limits catalogue requests. Wait beyond its requested window, then retry once.
+    await new Promise(resolve => setTimeout(resolve, Math.max(1500, seconds * 1000 + 500)));
+    return await pairgateRequest(path, "GET", params);
+  }
+}
+
 export type PairgateDataPlan = {
   id: string;
   networkId: string;
@@ -106,7 +119,7 @@ export async function getPairgateDataPlans(networkInput?: string): Promise<Pairg
   const wanted = networkSlug(networkInput || "mtn");
   if (!wanted) throw new Error("Choose a supported network: MTN, Airtel, Glo or 9mobile.");
 
-  const categoryPayload = await pairgateRequest("/data-plans/categories");
+  const categoryPayload = await catalogueRequest("/data-plans/categories");
   const categories = Array.isArray(categoryPayload?.data) ? categoryPayload.data : [];
   const matchingTypes = categories
     .filter((row: any) => networkSlug(row?.provider_name || row?.provider_id) === wanted && clean(row?.service_type).toLowerCase() === "data")
@@ -115,30 +128,32 @@ export async function getPairgateDataPlans(networkInput?: string): Promise<Pairg
   const planTypes = [...new Set(matchingTypes)];
   if (!planTypes.length) throw new Error("Pairgate returned no data-plan categories for " + wanted + ".");
 
-  const results = await Promise.all(planTypes.map(async (rawPlanType: unknown) => {
-    // Set/array inference can leave this value as unknown; normalize it before using it in the API request and returned plan.
-    const planType: string = clean(rawPlanType).toUpperCase();
-    const payload = await pairgateRequest("/data-plans", "GET", { provider_id: wanted, plan_type: planType });
-    return dataRows(payload, wanted).map((row: any): PairgateDataPlan | null => {
+  // Respect the cooldown between the categories request and the first plans request.
+  await new Promise(resolve => setTimeout(resolve, 2200));
+  // Do not fan out requests with Promise.all: that burst repeatedly trips Pairgate's 429 limit.
+  const allPlans: PairgateDataPlan[] = [];
+  for (let index = 0; index < planTypes.length; index++) {
+    const planType = clean(planTypes[index]).toUpperCase();
+    if (index > 0) await new Promise(resolve => setTimeout(resolve, 2200));
+    const payload = await catalogueRequest("/data-plans", { provider_id: wanted, plan_type: planType });
+    const rows = dataRows(payload, wanted);
+    for (const row of rows) {
       const id = clean(first(row, "plan_id", "id", "planId"));
       const name = clean(first(row, "name", "plan_name", "title"));
       const price = Number(first(row, "price", "amount", "selling_price"));
       const duration = first(row, "duration", "validity", "validity_period");
-      if (!id || !name || !Number.isFinite(price) || price <= 0) return null;
-      return {
-        id,
-        networkId: wanted,
+      if (!id || !name || !Number.isFinite(price) || price <= 0) continue;
+      allPlans.push({
+        id, networkId: wanted,
         network: ({ mtn: "MTN", airtel: "Airtel", glo: "Glo", "9mobile": "9mobile" } as Record<string, string>)[wanted],
-        name,
-        price,
+        name, price,
         validity: duration === "" ? "" : /^\d+$/.test(clean(duration)) ? clean(duration) + " days" : clean(duration),
         planType,
-      };
-    }).filter((plan: PairgateDataPlan | null): plan is PairgateDataPlan => Boolean(plan));
-  }));
-
+      });
+    }
+  }
   const unique = new Map<string, PairgateDataPlan>();
-  for (const plan of results.flat()) unique.set(plan.id, plan);
+  for (const plan of allPlans) unique.set(plan.id, plan);
   return [...unique.values()].sort((a, b) => a.price - b.price || a.name.localeCompare(b.name));
 }
 
