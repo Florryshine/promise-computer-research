@@ -98,7 +98,7 @@ export default function RequestService(){
  function renderField(f:ServiceField){
   // Provider IDs and provider-cost fields are internal integration data, never customer inputs.
   const internalProviderFields=["provider_plan_id","plan_id","plan_code","variation_code","package","provider_amount","network_id","cablename_id","cable_provider_id","cableplan_id","disco_id","meter_type_id","provider_id","data_plan_id","nifex_data_plan_id","nifex_plan_id","nifex_data_plan","nifex_plan_code","denomination","quantity","smartcard","smartcard_number","iuc_number","meter_number","exam_type"];
-  if((kind==="data"||kind==="cable")&&f.field_key==="amount")return null;
+  if(["data","cable","electricity","exam","datapin"].includes(kind)&&f.field_key==="amount")return null;
   if(isVTU&&internalProviderFields.includes(f.field_key))return null;
   const value=form[f.field_key]??"";
   const common={value,onChange:(e:React.ChangeEvent<HTMLInputElement|HTMLTextAreaElement|HTMLSelectElement>)=>set(f.field_key,e.target.value),placeholder:f.placeholder??undefined};
@@ -120,7 +120,7 @@ export default function RequestService(){
    const supabase=createClient();const {data:{user}}=await supabase.auth.getUser();
    if(!user){router.push("/login");return;}
    const internalKeys=["provider_plan_id","plan_id","plan_code","variation_code","package","provider_amount","network_id","cablename_id","cable_provider_id","cableplan_id","disco_id","meter_type_id","provider_id","data_plan_id","nifex_data_plan_id","nifex_plan_id","nifex_data_plan","nifex_plan_code","denomination","quantity","smartcard","smartcard_number","iuc_number","meter_number","exam_type"];
-   const missing=fields.find(f=>f.required&&!String(form[f.field_key]??"").trim()&&!(isVTU&&(internalKeys.includes(f.field_key)||((kind==="data"||kind==="cable")&&f.field_key==="amount")||(kind==="data"&&f.field_key==="network"))));
+   const missing=fields.find(f=>f.required&&!String(form[f.field_key]??"").trim()&&!(isVTU&&(internalKeys.includes(f.field_key)||(["data","cable","electricity","exam","datapin"].includes(kind)&&f.field_key==="amount")||(kind==="data"&&f.field_key==="network"))));
    if(missing)throw new Error("Please provide: "+missing.label+".");
    let orderAmount=0;let orderForm={...form};
    if(isVTU){
