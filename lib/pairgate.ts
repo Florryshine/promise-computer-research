@@ -201,7 +201,7 @@ async function updateFinalStatus(admin: any, order: any, transaction: any, statu
   }).eq("request_id", transaction.request_id);
 
   if (status === "successful") {
-    await admin.from("orders").update({ status: "completed", admin_note: "Pairgate confirmed the service transaction as successful." }).eq("id", order.id);
+    await admin.from("orders").update({ status: "completed", form_data: { ...(order.form_data || {}), provider_delivery: { status: "successful", message: providerMessage, data: providerData } }, admin_note: "Pairgate confirmed the service transaction as successful." }).eq("id", order.id);
     const service = Array.isArray(order.services) ? order.services[0] : order.services;
     await admin.from("notifications").insert({
       user_id: order.customer_id,
