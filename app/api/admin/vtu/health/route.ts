@@ -29,7 +29,7 @@ export async function GET() {
     }
 
     try {
-      const body = await pairgateRequest('/wallet/balance');
+      const body = await pairgateRequest('/wallet/balance', 'GET', undefined, false);
       result.providerReachable = true;
       result.httpStatus = 200;
       result.providerOk = String(body?.status || '').toLowerCase() === 'success' && Number.isFinite(Number(body?.data?.balance));
