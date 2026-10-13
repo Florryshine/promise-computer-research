@@ -134,7 +134,7 @@ export default function RequestService(){
   try{
    const supabase=createClient();const {data:{user}}=await supabase.auth.getUser();
    if(!user){router.push("/login");return;}
-   const missing=fields.find(f=>f.required&&!String(form[f.field_key]??"").trim()&&!(isVTU&&(isInternalProviderField(f)||((kind==="data"||kind==="cable")&&f.field_key==="amount")||(kind==="data"&&f.field_key==="network"))));
+   const missing=fields.find(f=>f.required&&!String(form[f.field_key]??"").trim()&&!(isVTU&&(isInternalProviderField(f)||((kind==="data"||kind==="cable"||kind==="electricity"||kind==="exam"||kind==="datapin")&&f.field_key==="amount")||(kind==="data"&&f.field_key==="network"))));
    if(missing)throw new Error("Please provide: "+missing.label+".");
    let orderAmount=0;let orderForm={...form};
    if(isVTU){
