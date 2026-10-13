@@ -57,7 +57,7 @@ export default async function OrderDetail({params}:{params:Promise<{id:string}>}
       {order.admin_note&&<div className="mt-5 rounded-2xl border border-blue-100 bg-blue-50 p-4"><p className="text-xs font-black uppercase tracking-wide text-[#0757d5]">Update from Promise Computer Research</p><p className="mt-2 whitespace-pre-wrap text-sm text-slate-700">{order.admin_note}</p></div>}
       <div className="mt-5">
         <p className="text-xs font-black uppercase tracking-wide text-slate-400">Submitted information</p>
-        <div className="mt-3 grid gap-3 sm:grid-cols-2">{Object.entries(order.form_data||{}).map(([key,value])=><div key={key} className="rounded-2xl border border-slate-200 p-4"><p className="text-[11px] font-bold uppercase tracking-wide text-slate-400">{key.replaceAll('_',' ')}</p><p className="mt-1 break-words text-sm font-semibold text-slate-700">{String(value??'—')}</p></div>)}</div>
+        <div className="mt-3 grid gap-3 sm:grid-cols-2">{Object.entries(order.form_data||{}).map(([key,value])=><div key={key} className="rounded-2xl border border-slate-200 p-4"><p className="text-[11px] font-bold uppercase tracking-wide text-slate-400">{key.replaceAll('_',' ')}</p><pre className="mt-1 whitespace-pre-wrap break-words text-sm font-semibold text-slate-700">{value&&typeof value==="object"?JSON.stringify(value,null,2):String(value??"—")}</pre></div>)}</div>
       </div>
       <div className="mt-5">
         <p className="text-xs font-black uppercase tracking-wide text-slate-400">Documents</p>
