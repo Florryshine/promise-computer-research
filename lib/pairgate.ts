@@ -162,7 +162,7 @@ function requestId(order: any) {
     crypto.createHash("sha1").update(order.id).digest("hex").slice(0, 10);
 }
 
-function normalize(order: any) {
+function normalize(order: any): any {
   const service = Array.isArray(order.services) ? order.services[0] : order.services;
   const slug = String(service?.slug || "");
   const form = (order.form_data || {}) as Record<string, any>;
