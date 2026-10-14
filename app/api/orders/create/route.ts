@@ -117,7 +117,7 @@ export async function POST(request:Request){
    verifiedFormData={...verifiedFormData,network,provider_id:network,denomination,quantity,provider_amount:String(providerAmount),unit_price:String(denomination),service_fee:String(fee),service_fee_rate:"5%"};
   }
 
-  const requiresQuote=!VTU_SLUGS.has(slug)&&service.price_type!=="fixed"&&finalAmount===0;
+  const requiresQuote=!VTU_SLUGS.has(slug)&&finalAmount===0&&(service.price_type!=="fixed"||Number(service.price||0)<=0);
   if(!Number.isFinite(finalAmount)||finalAmount<0||(finalAmount===0&&!requiresQuote))return NextResponse.json({error:"Invalid order amount."},{status:400});
   const reference="PCR-"+Date.now().toString().slice(-10);
   const {data:order,error:insertError}=await admin.from("orders").insert({
