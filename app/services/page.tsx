@@ -12,9 +12,6 @@ export default async function Services() {
     .eq("active", true)
     .order("sort_order");
 
-  const groupedJambSlugs = new Set(["jamb-original-result-printing","jamb-admission-letter-printing","jamb-admission-status-checking","jamb-reprinting","jamb-olevel-screenshot","jamb-email-phone-screenshot","jamb-profile-code-retrieval","jamb-registration-number-retrieval","jamb-indemnity-form"]);
-  const visibleServices = (services ?? []).filter(service => !groupedJambSlugs.has(service.slug));
-
   const groupedJambSlugs = new Set([
     "jamb-original-result-printing",
     "jamb-admission-letter-printing",
