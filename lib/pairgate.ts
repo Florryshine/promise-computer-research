@@ -273,6 +273,7 @@ export async function fulfillOrder(orderId: string) {
     .eq("id", orderId).maybeSingle();
   if (error) throw error;
   if (!order) throw new Error("Order not found");
+  if (["completed", "cancelled"].includes(String(order.status))) return { status: order.status, message: "This order is already finalized. No new provider purchase was submitted." };
   if (order.payment_status !== "paid") return { status: "skipped", message: "Order is not paid." };
 
   const product = normalize(order);
@@ -291,14 +292,27 @@ export async function fulfillOrder(orderId: string) {
     product.kind === "epin" && (!product.network || ![100,200,500,1000,2000,5000,10000,20000].includes(product.denomination) || !Number.isInteger(product.quantity) || product.quantity < 1 || product.quantity > 10) ? "Choose a supported network, denomination and quantity from 1 to 10." : "";
   if (problem) return markNeedsAttention(admin, order, problem);
 
-  const rid = requestId(order);
-  const { data: existing, error: existingError } = await admin.from("provider_transactions").select("*").eq("request_id", rid).maybeSingle();
+  const baseRequestId = requestId(order);
+  const { data: existing, error: existingError } = await admin.from("provider_transactions")
+    .select("*").eq("order_id", order.id).eq("service_id", product.kind).order("created_at", { ascending: false }).limit(1).maybeSingle();
   if (existingError) throw existingError;
   if (existing?.status === "successful") return { status: "successful", message: "Already fulfilled.", transaction: existing };
-  if (existing && existing.response && Object.keys(existing.response).length > 0) {
+
+  const responseStatus = clean(existing?.response?.data?.status ?? existing?.response?.status).toLowerCase();
+  const explicitProviderRejection = Boolean(existing && existing.status === "failed" && (
+    existing?.response?.data?.status === false ||
+    existing?.response?.status === false ||
+    ["failed", "failure", "error", "rejected", "declined", "cancelled"].includes(responseStatus) ||
+    (Boolean(existing?.response?.error) && existing?.response?.ambiguous !== true && !/fetch failed|network|timeout|timed out|dns|socket|econn|connection reset/i.test(clean(existing?.response?.error)))
+  ));
+  // A confirmed provider rejection can be retried against the same paid order.
+  // Unknown outcomes are status-checked, never blindly resubmitted, to reduce duplicate delivery.
+  const retryableProviderRejection = explicitProviderRejection;
+
+  if (existing && existing.response && Object.keys(existing.response).length > 0 && !retryableProviderRejection) {
     return checkPendingTransaction(admin, order, existing);
   }
-  if (existing) {
+  if (existing && !retryableProviderRejection) {
     await admin.from("orders").update({
       status: "needs_information",
       admin_note: "A Pairgate transaction record exists without a saved provider response. It was not resubmitted to prevent a possible duplicate charge. Check Pairgate transaction history before taking action.",
@@ -306,9 +320,20 @@ export async function fulfillOrder(orderId: string) {
     return { status: "pending", message: "Existing Pairgate transaction has no saved response. It was not resubmitted to avoid a possible duplicate charge." };
   }
 
+  // Preserve the original failed attempt and use a unique reference for the safe retry.
+  const rid = retryableProviderRejection
+    ? baseRequestId + "-R-" + Date.now().toString(36).toUpperCase()
+    : baseRequestId;
+  if (retryableProviderRejection) {
+    await admin.from("orders").update({
+      status: "processing",
+      admin_note: "Pairgate explicitly rejected the previous delivery attempt. A new delivery attempt is being submitted against the existing successful payment.",
+    }).eq("id", order.id);
+  }
+
   const { error: insertError } = await admin.from("provider_transactions").insert({
     order_id: order.id, provider: "pairgate", request_id: rid, service_id: product.kind,
-    amount: product.amount, status: "pending", provider_status: "pending", request_data: product,
+    amount: product.amount, status: "pending", provider_status: retryableProviderRejection ? "confirmed-failure retry submitted" : "pending", request_data: product,
   });
   if (insertError) throw insertError;
 

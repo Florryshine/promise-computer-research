@@ -12,7 +12,7 @@ type EpinDenomination={value:number;label:string};
 const VTU_SLUGS=new Set(["airtime-recharge","data-subscription","dstv-subscription","gotv-subscription","startimes-subscription","electricity-bill","exam-pins","data-pins"]);
 const FEE_RATE:Record<string,number>={airtime:3,data:5,cable:5,electricity:5,exam:5,datapin:5};
 
-const INTERNAL_PROVIDER_FIELDS=new Set(["provider_plan_id","plan_id","plan_code","variation_code","package","provider_amount","network_id","cablename_id","cable_provider_id","cableplan_id","disco_id","meter_type_id","provider_id","data_plan_id","nifex_data_plan_id","nifex_plan_id","nifex_data_plan","nifex_plan_code","meter_number","meter_type","exam_type","quantity","denomination","smartcard","smartcard_number","iuc_number"]);
+const INTERNAL_PROVIDER_FIELDS=new Set(["provider_plan_id","plan_id","plan_code","variation_code","package","provider_amount","network_id","cablename_id","cable_provider_id","cableplan_id","disco_id","meter_type_id","provider_id","service_provider","electricity_provider","electricity_company","distribution_company","disco","data_plan_id","nifex_data_plan_id","nifex_plan_id","nifex_data_plan","nifex_plan_code","meter_number","meter_type","exam_type","quantity","denomination","smartcard","smartcard_number","iuc_number"]);
 function isInternalProviderField(field:ServiceField){
  const key=String(field.field_key||"").toLowerCase().replace(/[\s-]+/g,"_");
  const label=String(field.label||"").toLowerCase();
@@ -24,6 +24,7 @@ function isInternalProviderField(field:ServiceField){
 export default function RequestService(){
  const params=useParams<{slug:string}>(),router=useRouter();
  const [service,setService]=useState<any>(null),[fields,setFields]=useState<ServiceField[]>([]),[form,setForm]=useState<Record<string,string>>({});
+ const [jambServices,setJambServices]=useState<any[]>([]);
  const [loading,setLoading]=useState(false),[pageLoading,setPageLoading]=useState(true),[error,setError]=useState("");
  const [dataPlans,setDataPlans]=useState<DataPlan[]>([]),[plansLoading,setPlansLoading]=useState(false),[plansError,setPlansError]=useState("");
  const [cablePlans,setCablePlans]=useState<DataPlan[]>([]),[cableLoading,setCableLoading]=useState(false),[cableError,setCableError]=useState("");
@@ -45,6 +46,10 @@ export default function RequestService(){
   const {data:f}=s?await supabase.from("service_fields").select("field_key,label,field_type,placeholder,required,options,sort_order").eq("service_id",s.id).order("sort_order"):{data:[]};
   const loadedFields=(f??[]) as ServiceField[];
   setService(s);setFields(loadedFields);
+  if(params.slug==="jamb-services"){
+   const {data:children}=await supabase.from("services").select("slug,title,description,price,price_type").eq("active",true).eq("category","JAMB").neq("slug","jamb-services").order("sort_order");
+   setJambServices(children??[]);
+  }
   // Automatically choose fields with only one valid option (for example, Airtime type = VTU).
   // This avoids asking customers to select an option when there is no actual choice.
   const singleOptionDefaults:Record<string,string>={};
@@ -134,7 +139,32 @@ export default function RequestService(){
   try{
    const supabase=createClient();const {data:{user}}=await supabase.auth.getUser();
    if(!user){router.push("/login");return;}
-   const missing=fields.find(f=>f.required&&!String(form[f.field_key]??"").trim()&&!(isVTU&&(isInternalProviderField(f)||((kind==="data"||kind==="cable"||kind==="electricity"||kind==="exam"||kind==="datapin")&&f.field_key==="amount")||(kind==="data"&&f.field_key==="network"))));
+   if(params.slug==="jamb-services"){
+    const selected=jambServices.find(item=>item.slug===form.jamb_service_slug);
+    if(!selected)throw new Error("Choose the JAMB service you need.");
+    if(!String(form.full_name||"").trim()||!String(form.phone||"").trim()||!String(form.exam_year||"").trim())throw new Error("Provide your name, phone number and exam year.");
+    const message=[
+     "PCR JAMB SERVICE REQUEST",
+     "Service: "+selected.title,
+     "Full name: "+form.full_name,
+     "Phone: "+form.phone,
+     "Email: "+(form.email||"Not provided"),
+     "JAMB registration number: "+(form.jamb_registration_number||"Not provided"),
+     "Exam year: "+form.exam_year,
+     "Additional details: "+(form.request_details||"None")
+    ].join("\n");
+    window.location.href="https://wa.me/2347058391188?text="+encodeURIComponent(message);
+    setLoading(false);return;
+   }
+   const providerAliases=["provider_id","disco_id","service_provider","electricity_provider","electricity_company","distribution_company","disco"];
+   const missing=fields.find(f=>{
+    if(!f.required||String(form[f.field_key]??"").trim())return false;
+    if(!isVTU||isInternalProviderField(f))return !isVTU;
+    if(["data","cable","electricity","exam","datapin"].includes(kind)&&f.field_key==="amount")return false;
+    if(kind==="data"&&f.field_key==="network")return false;
+    if(kind==="electricity"&&providerAliases.includes(f.field_key))return false;
+    return true;
+   });
    if(missing)throw new Error("Please provide: "+missing.label+".");
    let orderAmount=0;let orderForm={...form};
    if(isVTU){
@@ -168,13 +198,22 @@ export default function RequestService(){
 
  return <main className="section bg-slate-50"><div className="container"><div className="mx-auto max-w-2xl rounded-3xl bg-white p-6 shadow-soft sm:p-8">
   <p className="text-xs font-bold uppercase tracking-[.16em] text-[#0757d5]">Service request</p><h1 className="mt-2 text-3xl font-black">{service.title}</h1>
-  <p className="mt-2 text-sm text-slate-500">{isVTU?"Enter your details and continue to payment.":service.price_type==="fixed"&&service.price!=null?"Price: ₦"+Number(service.price).toLocaleString()+".":"Submit your details."}</p>
+  <p className="mt-2 text-sm text-slate-500">{params.slug==="jamb-services"?"Choose the JAMB service you need. Your request will open WhatsApp for PCR to review; no payment is collected on this form.":isVTU?"Enter your details and continue to payment.":service.price_type==="fixed"&&service.price!=null?"Price: ₦"+Number(service.price).toLocaleString()+".":"Submit your details."}</p>
   {error&&<div className="mt-5 rounded-xl border border-red-200 bg-red-50 p-3 text-sm text-red-700">{error}</div>}
   <form onSubmit={submit} className="mt-7 space-y-5">
-   {[["full_name","Full name","text"],["phone","Phone number","tel"],["email","Email","email"]].map(([k,l,t])=><label key={k} className="block text-sm font-bold">{l}<input required value={form[k]??""} onChange={e=>set(k,e.target.value)} type={t} className="mt-2 w-full rounded-xl border border-slate-200 px-4 py-3"/></label>)}
+   {[["full_name","Full name","text"],["phone","Phone number","tel"],["email","Email","email"]].map(([k,l,t])=><label key={k} className="block text-sm font-bold">{l}<input required={k!=="email"} value={form[k]??""} onChange={e=>set(k,e.target.value)} type={t} className="mt-2 w-full rounded-xl border border-slate-200 px-4 py-3"/></label>)}
+   {params.slug==="jamb-services"&&<div className="space-y-4 rounded-2xl border border-slate-200 p-4">
+    <label className="block text-sm font-bold">JAMB service needed *
+     <select required value={form.jamb_service_slug||""} onChange={e=>set("jamb_service_slug",e.target.value)} className="mt-2 w-full rounded-xl border border-slate-200 bg-white px-4 py-3">
+      <option value="">Choose a service</option>{jambServices.map(item=><option key={item.slug} value={item.slug}>{item.title}</option>)}
+     </select>
+    </label>
+    <label className="block text-sm font-bold">JAMB registration number (if available)<input value={form.jamb_registration_number||""} onChange={e=>set("jamb_registration_number",e.target.value)} className="mt-2 w-full rounded-xl border border-slate-200 px-4 py-3"/></label>
+    <label className="block text-sm font-bold">Exam year *<input required value={form.exam_year||""} onChange={e=>set("exam_year",e.target.value)} placeholder="e.g. 2026" inputMode="numeric" className="mt-2 w-full rounded-xl border border-slate-200 px-4 py-3"/></label>
+   </div>}
    {kind==="electricity"&&<div className="space-y-4 rounded-2xl border border-slate-200 p-4">
     <label className="block text-sm font-bold">Electricity provider *
-     <select value={form.provider_id||""} onChange={e=>set("provider_id",e.target.value)} required disabled={utilityLoading||utilityProviders.length===0} className="mt-2 w-full rounded-xl border border-slate-200 bg-white px-4 py-3"><option value="">{utilityLoading?"Loading providers…":"Choose your electricity provider"}</option>{utilityProviders.map(p=><option key={p.id} value={p.id}>{p.name}</option>)}</select>
+     <select value={form.provider_id||form.disco_id||form.electricity_provider||form.service_provider||""} onChange={e=>setForm(x=>({...x,provider_id:e.target.value,disco_id:e.target.value,electricity_provider:e.target.value,service_provider:e.target.value,electricity_company:e.target.value,distribution_company:e.target.value,disco:e.target.value}))} required disabled={utilityLoading||utilityProviders.length===0} className="mt-2 w-full rounded-xl border border-slate-200 bg-white px-4 py-3"><option value="">{utilityLoading?"Loading providers…":"Choose your electricity provider"}</option>{utilityProviders.map(p=><option key={p.id} value={p.id}>{p.name}</option>)}</select>
     </label>
     <label className="block text-sm font-bold">Meter number *<input value={form.meter_number||""} onChange={e=>set("meter_number",e.target.value)} required inputMode="numeric" className="mt-2 w-full rounded-xl border border-slate-200 px-4 py-3"/></label>
     <label className="block text-sm font-bold">Meter type *
@@ -228,10 +267,10 @@ export default function RequestService(){
     {plansError&&<p className="rounded-lg bg-amber-50 p-3 text-sm text-amber-900">Could not load live plans: {plansError}</p>}
     {!plansLoading&&!plansError&&dataPlans.length===0&&<p className="text-sm text-slate-600">No plans were returned by Pairgate. The provider catalogue endpoint must be configured before data purchases can be enabled.</p>}
    </div>}
-   {fields.filter(f=>!(isVTU&&(isInternalProviderField(f)||["cable","electricity","exam","datapin"].includes(kind)||((kind==="data"||kind==="cable")&&f.field_key==="amount")||(kind==="data"&&f.field_key==="network")))).map(f=><label key={f.field_key} className="block text-sm font-bold">{f.label}{f.required&&<span className="text-red-500"> *</span>}{renderField(f)}</label>)}
+   {params.slug!=="jamb-services"&&fields.filter(f=>!(isVTU&&(isInternalProviderField(f)||["cable","electricity","exam","datapin"].includes(kind)||((kind==="data"||kind==="cable")&&f.field_key==="amount")||(kind==="data"&&f.field_key==="network")))).map(f=><label key={f.field_key} className="block text-sm font-bold">{f.label}{f.required&&<span className="text-red-500"> *</span>}{renderField(f)}</label>)}
    {isVTU&&providerAmount>0&&<div className="rounded-2xl bg-slate-50 p-4 text-sm"><div className="flex justify-between"><span>Provider amount</span><b>₦{providerAmount.toLocaleString()}</b></div><div className="mt-2 flex justify-between"><span>Service fee</span><b>₦{serviceFee.toLocaleString()}</b></div><div className="mt-3 flex justify-between border-t pt-3 text-base"><span className="font-black">Total to pay</span><b>₦{total.toLocaleString()}</b></div></div>}
-   <label className="block text-sm font-bold">Request details{!fields.length&&!isVTU&&<span className="text-red-500"> *</span>}<textarea required={!fields.length&&!isVTU} value={form.request_details??""} onChange={e=>set("request_details",e.target.value)} rows={5} className="mt-2 w-full rounded-xl border border-slate-200 px-4 py-3" placeholder="Tell us anything else we should know."/></label>
-   <button disabled={loading||(kind==="data"&&(!form.provider_plan_id||plansLoading||Boolean(plansError)))||(kind==="cable"&&(!form.provider_plan_id||!form.smartcard||cableLoading||Boolean(cableError)))||(kind==="electricity"&&(!form.provider_id||!form.meter_number||Number(form.amount)<1000||utilityLoading||Boolean(utilityError)))||(kind==="exam"&&(!form.exam_type||!Number.isInteger(Number(form.quantity))||Number(form.quantity)<1||Number(form.quantity)>10||Number(service?.price||0)<=0||utilityLoading||Boolean(utilityError)))||(kind==="datapin"&&(!form.denomination||!Number.isInteger(Number(form.quantity))||Number(form.quantity)<1||Number(form.quantity)>10||epinLoading||Boolean(epinError)))} className="w-full rounded-xl bg-[#0757d5] px-5 py-3.5 font-bold text-white disabled:cursor-not-allowed disabled:opacity-60">{loading?"Submitting…":isVTU&&total>0?"Continue to payment":"Submit"}</button>
+   <label className="block text-sm font-bold">Request details{!fields.length&&!isVTU&&params.slug!=="jamb-services"&&<span className="text-red-500"> *</span>}<textarea required={!fields.length&&!isVTU&&params.slug!=="jamb-services"} value={form.request_details??""} onChange={e=>set("request_details",e.target.value)} rows={5} className="mt-2 w-full rounded-xl border border-slate-200 px-4 py-3" placeholder="Tell us anything else we should know."/></label>
+   <button disabled={loading||(kind==="data"&&(!form.provider_plan_id||plansLoading||Boolean(plansError)))||(kind==="cable"&&(!form.provider_plan_id||!form.smartcard||cableLoading||Boolean(cableError)))||(kind==="electricity"&&(!form.provider_id||!form.meter_number||Number(form.amount)<1000||utilityLoading||Boolean(utilityError)))||(kind==="exam"&&(!form.exam_type||!Number.isInteger(Number(form.quantity))||Number(form.quantity)<1||Number(form.quantity)>10||Number(service?.price||0)<=0||utilityLoading||Boolean(utilityError)))||(kind==="datapin"&&(!form.denomination||!Number.isInteger(Number(form.quantity))||Number(form.quantity)<1||Number(form.quantity)>10||epinLoading||Boolean(epinError)))} className="w-full rounded-xl bg-[#0757d5] px-5 py-3.5 font-bold text-white disabled:cursor-not-allowed disabled:opacity-60">{loading?"Submitting…":params.slug==="jamb-services"?"Continue to WhatsApp":isVTU&&total>0?"Continue to payment":"Submit"}</button>
   </form>
  </div></div></main>;
 }

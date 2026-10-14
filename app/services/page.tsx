@@ -12,6 +12,19 @@ export default async function Services() {
     .eq("active", true)
     .order("sort_order");
 
+  const groupedJambSlugs = new Set([
+    "jamb-original-result-printing",
+    "jamb-admission-letter-printing",
+    "jamb-admission-status-checking",
+    "jamb-reprinting",
+    "jamb-olevel-screenshot",
+    "jamb-email-phone-screenshot",
+    "jamb-profile-code-retrieval",
+    "jamb-registration-number-retrieval",
+    "jamb-indemnity-form",
+  ]);
+  const visibleServices = (services ?? []).filter(service => !groupedJambSlugs.has(service.slug));
+
   return (
     <main>
       <section className="bg-[#f4f8ff] py-8 sm:py-10">
@@ -29,7 +42,7 @@ export default async function Services() {
       <section className="py-6 sm:py-9">
         <div className="container">
           <div className="grid grid-cols-3 gap-3 sm:grid-cols-4 sm:gap-4 lg:grid-cols-5 xl:grid-cols-6">
-            {(services ?? []).map((service) => {
+            {visibleServices.map((service) => {
               const presentation = getServicePresentation(service.slug, service.category);
               return (
                 <Link
