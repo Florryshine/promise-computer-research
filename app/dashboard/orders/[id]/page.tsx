@@ -4,6 +4,7 @@ import {createClient} from '@/lib/supabase/server';
 import {createAdminClient} from '@/lib/supabase/admin';
 import DocumentUpload from './DocumentUpload';
 import RequeryPaymentButton from '@/components/payments/RequeryPaymentButton';
+import PayButton from '../PayButton';
 
 export default async function OrderDetail({params}:{params:Promise<{id:string}>}){
   const {id}=await params;
@@ -52,7 +53,7 @@ export default async function OrderDetail({params}:{params:Promise<{id:string}>}
       </div>
       <div className="mt-5 grid gap-3 sm:grid-cols-2">
         <div className="rounded-2xl bg-slate-50 p-4"><p className="text-xs font-bold text-slate-400">Payment</p><p className="mt-1 font-bold capitalize">{String(order.payment_status).replace('_',' ')}</p>{Number(order.amount||0)>0&&!['completed','cancelled'].includes(String(order.status))&&<RequeryPaymentButton orderId={order.id} paid={order.payment_status==='paid'}/>}</div>
-        <div className="rounded-2xl bg-slate-50 p-4"><p className="text-xs font-bold text-slate-400">Amount</p><p className="mt-1 font-bold">₦{Number(order.amount||0).toLocaleString()}</p></div>
+        <div className="rounded-2xl bg-slate-50 p-4"><p className="text-xs font-bold text-slate-400">Amount</p><p className="mt-1 font-bold">₦{Number(order.amount||0).toLocaleString()}</p>{Number(order.amount||0)<=0&&order.payment_status!=='paid'&&<p className="mt-2 text-sm text-amber-800">Awaiting a quote from Promise Computer Research. You will see the amount here when it is ready.</p>}{Number(order.amount||0)>0&&['unpaid','failed'].includes(String(order.payment_status))&&<div className="mt-3"><PayButton orderId={order.id}/></div>}</div>
       </div>
       {typeof order.form_data?.delivery_pin==='string' && order.form_data.delivery_pin.trim() && <div className="mt-5 rounded-2xl border-2 border-emerald-300 bg-emerald-50 p-5"><p className="text-xs font-black uppercase tracking-wide text-emerald-800">Your prepaid electricity token / PIN</p><p className="mt-2 break-words font-mono text-xl font-black tracking-wide text-slate-900">{order.form_data.delivery_pin}</p><p className="mt-2 text-sm text-emerald-900">Enter this token on your prepaid meter. Keep it for your records.</p><button type="button" onClick={undefined} className="hidden">Copy token</button></div>}
       {order.payment_status==='paid' && String(service?.category||'').trim().toUpperCase()==='JAMB' && <div className="mt-5 rounded-2xl border border-emerald-200 bg-emerald-50 p-4"><p className="font-black text-emerald-900">Payment received</p><p className="mt-1 text-sm text-emerald-800">PCR will fulfil this service manually. If you want to send your order details on WhatsApp as well, you can do so below; this is optional.</p><a href={"https://wa.me/2347058391188?text="+encodeURIComponent("PCR JAMB SERVICE ORDER\nService: "+String(service?.title||"") +"\nOrder reference: "+order.reference+"\nFull name: "+String(order.form_data?.full_name||"")+"\nPhone: "+String(order.form_data?.phone||"")+"\nExam year: "+String(order.form_data?.exam_year||"")+"\nJAMB registration number: "+String(order.form_data?.jamb_registration_number||"Not provided"))} target="_blank" rel="noreferrer" className="mt-3 inline-flex rounded-xl bg-emerald-700 px-4 py-2.5 text-sm font-bold text-white">Optional: Continue on WhatsApp</a></div>}
