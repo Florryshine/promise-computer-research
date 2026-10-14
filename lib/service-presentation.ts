@@ -1,6 +1,7 @@
 export type ServicePresentation = { icon:string; details:string[] };
 
 const presentation:Record<string,ServicePresentation> = {
+  'jamb-services': {icon:'📘',details:['Choose the JAMB service you need','Send your details to PCR on WhatsApp','Manual service — price and next steps confirmed by admin']},
   'jamb-original-result-printing': {icon:'📘',details:['Manual processing by PCR','Provide your JAMB registration number, exam year and any required supporting details.']},
   
   'jamb-admission-letter-printing': {icon:'📄',details:['Manual processing by PCR','Provide your JAMB registration number, exam year and any required supporting details.']},
