@@ -8,10 +8,19 @@ export async function POST(request: Request) {
     const secret = (process.env.PAIRGATE_WEBHOOK_SECRET || "").trim();
     if (!secret) return new NextResponse("Pairgate webhook secret is not configured", { status: 503 });
     const signature = request.headers.get("x-pairgate-signature") || request.headers.get("x-webhook-signature") || "";
-    const expected = crypto.createHmac("sha256", secret).update(raw).digest("hex");
-    const supplied = Buffer.from(signature);
-    const correct = Buffer.from(expected);
-    if (supplied.length !== correct.length || !crypto.timingSafeEqual(supplied, correct)) {
+    const timestamp = request.headers.get("x-pairgate-timestamp") || "";
+    // Pairgate's documented signature is HMAC_SHA256(secret, timestamp + "." + raw body).
+    // Also accept the legacy raw-body signature for installations configured before timestamp signing.
+    const candidates = [
+      timestamp ? crypto.createHmac("sha256", secret).update(timestamp + "." + raw).digest("hex") : "",
+      crypto.createHmac("sha256", secret).update(raw).digest("hex")
+    ].filter(Boolean);
+    const validSignature = candidates.some(expected => {
+      const supplied = Buffer.from(signature);
+      const correct = Buffer.from(expected);
+      return supplied.length === correct.length && crypto.timingSafeEqual(supplied, correct);
+    });
+    if (!validSignature) {
       return new NextResponse("Invalid signature", { status: 401 });
     }
 

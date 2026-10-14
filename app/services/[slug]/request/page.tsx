@@ -146,17 +146,14 @@ export default function RequestService(){
     const selected=jambServices.find(item=>item.slug===form.jamb_service_slug);
     if(!selected)throw new Error("Choose the JAMB service you need.");
     if(!String(form.full_name||"").trim()||!String(form.phone||"").trim()||!String(form.exam_year||"").trim())throw new Error("Provide your name, phone number and exam year.");
-    const message=[
-     "PCR JAMB SERVICE REQUEST",
-     "Service: "+selected.title,
-     "Full name: "+form.full_name,
-     "Phone: "+form.phone,
-     "Email: "+(form.email||"Not provided"),
-     "JAMB registration number: "+(form.jamb_registration_number||"Not provided"),
-     "Exam year: "+form.exam_year,
-     "Additional details: "+(form.request_details||"None")
-    ].join("\n");
-    window.location.href="https://wa.me/2347058391188?text="+encodeURIComponent(message);
+    const createOrder=await fetch("/api/orders/create",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({
+      slug:selected.slug,
+      customer_note:form.request_details||"",
+      form_data:{...form,jamb_service_slug:selected.slug,jamb_service_title:selected.title,service_fulfilment:"manual_via_whatsapp_or_admin"}
+    })});
+    const created=await createOrder.json();
+    if(!createOrder.ok)throw new Error(created?.error||"Could not create this JAMB service order.");
+    router.push("/dashboard/orders?new="+created.id+"&pay=1");
     setLoading(false);return;
    }
    const providerAliases=["provider_id","disco_id","service_provider","electricity_provider","electricity_company","distribution_company","disco"];
@@ -208,7 +205,7 @@ export default function RequestService(){
    {params.slug==="jamb-services"&&<div className="space-y-4 rounded-2xl border border-slate-200 p-4">
     <label className="block text-sm font-bold">JAMB service needed *
      <select required value={form.jamb_service_slug||""} onChange={e=>set("jamb_service_slug",e.target.value)} className="mt-2 w-full rounded-xl border border-slate-200 bg-white px-4 py-3">
-      <option value="">Choose a service</option>{jambServices.map(item=><option key={item.slug} value={item.slug}>{item.title}</option>)}
+      <option value="">Choose a service</option>{jambServices.map(item=><option key={item.slug} value={item.slug}>{item.title} — ₦1,500</option>)}
      </select>
     </label>
     <label className="block text-sm font-bold">JAMB registration number (if available)<input value={form.jamb_registration_number||""} onChange={e=>set("jamb_registration_number",e.target.value)} className="mt-2 w-full rounded-xl border border-slate-200 px-4 py-3"/></label>
