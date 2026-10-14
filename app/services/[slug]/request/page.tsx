@@ -157,7 +157,14 @@ export default function RequestService(){
     setLoading(false);return;
    }
    const providerAliases=["provider_id","disco_id","service_provider","electricity_provider","electricity_company","distribution_company","disco"];
-   const missing=fields.find(f=>f.required&&!String(form[f.field_key]??"").trim()&&!(isVTU&&(isInternalProviderField(f)||((kind==="data"||kind==="cable"||kind==="electricity"||kind==="exam"||kind==="datapin")&&f.field_key==="amount")||(kind==="data"&&f.field_key==="network")||(kind==="electricity"&&providerAliases.includes(f.field_key))));
+   const missing=fields.find(f=>{
+    if(!f.required||String(form[f.field_key]??"").trim())return false;
+    if(!isVTU||isInternalProviderField(f))return !isVTU;
+    if(["data","cable","electricity","exam","datapin"].includes(kind)&&f.field_key==="amount")return false;
+    if(kind==="data"&&f.field_key==="network")return false;
+    if(kind==="electricity"&&providerAliases.includes(f.field_key))return false;
+    return true;
+   });
    if(missing)throw new Error("Please provide: "+missing.label+".");
    let orderAmount=0;let orderForm={...form};
    if(isVTU){
