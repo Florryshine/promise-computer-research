@@ -7,6 +7,7 @@ const VTU_SLUGS=new Set(["airtime-recharge","data-subscription","dstv-subscripti
 const clean=(v:unknown)=>String(v??"").trim();
 const serviceFee=(amount:number,rate:number)=>Math.ceil(amount*rate/100);
 const EXAM_PIN_PRICES:Record<string,number>={waec:6500,neco:3000,nabt:1200};
+const EXAM_PIN_PRICES:Record<string,number>={waec:6500,neco:3000,nabt:1200};
 function rows(payload:any):any[]{
  const data=payload?.data??payload;
  if(Array.isArray(data))return data;
