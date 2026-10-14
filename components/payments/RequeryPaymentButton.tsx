@@ -33,6 +33,7 @@ export default function RequeryPaymentButton({ orderId, disabled = false, paid =
       <button type="button" onClick={requery} disabled={disabled || loading} className="rounded-xl bg-[#0757d5] px-4 py-2 text-sm font-bold text-white disabled:opacity-60">
         {loading ? (paid ? 'Requerying service…' : 'Checking Paystack…') : (paid ? 'Requery payment & retry service' : 'Check payment status')}
       </button>
+      {paid && <p className="mb-2 text-xs text-slate-600">Payment was already marked successful. This checks the payment record and safely retries service delivery if Pairgate confirmed the previous attempt failed.</p>}
       {result && (
         <div className="mt-3 text-sm">
           <p className={`font-bold ${result.ok ? 'text-emerald-700' : 'text-red-600'}`}>{result.message || result.cause || 'No payment result returned.'}</p>
