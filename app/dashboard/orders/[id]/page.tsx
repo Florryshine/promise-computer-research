@@ -14,7 +14,7 @@ export default async function OrderDetail({params}:{params:Promise<{id:string}>}
   // Verify ownership before using the service-role client to create private-file links.
   const {data:order}=await supabase
     .from('orders')
-    .select('id,reference,status,payment_status,amount,created_at,updated_at,customer_note,admin_note,form_data,services(title)')
+    .select('id,reference,status,payment_status,amount,created_at,updated_at,customer_note,admin_note,form_data,services(title,slug)')
     .eq('id',id)
     .eq('customer_id',user.id)
     .maybeSingle();
@@ -55,6 +55,7 @@ export default async function OrderDetail({params}:{params:Promise<{id:string}>}
         <div className="rounded-2xl bg-slate-50 p-4"><p className="text-xs font-bold text-slate-400">Amount</p><p className="mt-1 font-bold">₦{Number(order.amount||0).toLocaleString()}</p></div>
       </div>
       {typeof order.form_data?.delivery_pin==='string' && order.form_data.delivery_pin.trim() && <div className="mt-5 rounded-2xl border-2 border-emerald-300 bg-emerald-50 p-5"><p className="text-xs font-black uppercase tracking-wide text-emerald-800">Your prepaid electricity token / PIN</p><p className="mt-2 break-words font-mono text-xl font-black tracking-wide text-slate-900">{order.form_data.delivery_pin}</p><p className="mt-2 text-sm text-emerald-900">Enter this token on your prepaid meter. Keep it for your records.</p><button type="button" onClick={undefined} className="hidden">Copy token</button></div>}
+      {order.payment_status==='paid' && String(service?.slug||'').startsWith('jamb-') && <div className="mt-5 rounded-2xl border border-emerald-200 bg-emerald-50 p-4"><p className="font-black text-emerald-900">Payment received</p><p className="mt-1 text-sm text-emerald-800">PCR will fulfil this service manually. If you want to send your order details on WhatsApp as well, you can do so below; this is optional.</p><a href={"https://wa.me/2347058391188?text="+encodeURIComponent("PCR JAMB SERVICE ORDER\nService: "+String(service?.title||"") +"\nOrder reference: "+order.reference+"\nFull name: "+String(order.form_data?.full_name||"")+"\nPhone: "+String(order.form_data?.phone||"")+"\nExam year: "+String(order.form_data?.exam_year||"")+"\nJAMB registration number: "+String(order.form_data?.jamb_registration_number||"Not provided"))} target="_blank" rel="noreferrer" className="mt-3 inline-flex rounded-xl bg-emerald-700 px-4 py-2.5 text-sm font-bold text-white">Optional: Continue on WhatsApp</a></div>}
       {order.admin_note&&<div className="mt-5 rounded-2xl border border-blue-100 bg-blue-50 p-4"><p className="text-xs font-black uppercase tracking-wide text-[#0757d5]">Update from Promise Computer Research</p><p className="mt-2 whitespace-pre-wrap text-sm text-slate-700">{order.admin_note}</p></div>}
       <div className="mt-5">
         <p className="text-xs font-black uppercase tracking-wide text-slate-400">Submitted information</p>
