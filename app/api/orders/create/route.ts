@@ -93,7 +93,7 @@ export async function POST(request:Request){
    if(!["waec","neco","nabt"].includes(provider)||!Number.isInteger(quantity)||quantity<1||quantity>10)return NextResponse.json({error:"Choose WAEC, NECO or NABTEB and a quantity from 1 to 10."},{status:400});
    if(service.price_type!=="fixed"||Number(service.price||0)<=0)return NextResponse.json({error:"Exam PIN selling price is not configured. Set the service's fixed price per PIN before accepting payment."},{status:503});
    const providerPayload=await pairgateRequest("/providers/education");
-   if(!rows(providerPayload).some((p:any)=>String(p.slug||"").toLowerCase()===provider))return NextResponse.json({error:"Pairgate does not currently list that exam provider."},{status:400});
+   if(!rows(providerPayload).some((p:any)=>String(p.slug??p.id??"").toLowerCase()===provider))return NextResponse.json({error:"Pairgate does not currently list that exam provider."},{status:400});
    const providerAmount=Number(service.price)*quantity;
    const fee=serviceFee(providerAmount,5);
    finalAmount=providerAmount+fee;
