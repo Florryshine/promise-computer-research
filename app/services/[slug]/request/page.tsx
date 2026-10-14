@@ -12,6 +12,7 @@ type EpinDenomination={value:number;label:string};
 const VTU_SLUGS=new Set(["airtime-recharge","data-subscription","dstv-subscription","gotv-subscription","startimes-subscription","electricity-bill","exam-pins","data-pins"]);
 const FEE_RATE:Record<string,number>={airtime:3,data:5,cable:5,electricity:5,exam:5,datapin:5};
 const EXAM_PIN_PRICES:Record<string,number>={waec:6500,neco:3000,nabt:1200};
+const JAMB_SERVICE_PRICES:Record<string,number>={"jamb-original-result-portal":2500,"jamb-original-result-no-portal":3500,"jamb-admission-letter-portal":3000,"jamb-admission-letter-no-portal":4000,"jamb-original-result-printing":1000,"jamb-admission-letter-printing":1000,"jamb-admission-status-checking":1000,"jamb-reprinting":1000,"jamb-olevel-screenshot":1000,"jamb-email-phone-screenshot":1000,"jamb-profile-code-retrieval":1000,"jamb-registration-number-retrieval":1000,"jamb-indemnity-form":1000};
 
 const INTERNAL_PROVIDER_FIELDS=new Set(["provider_plan_id","plan_id","plan_code","variation_code","package","provider_amount","network_id","cablename_id","cable_provider_id","cableplan_id","disco_id","meter_type_id","provider_id","service_provider","electricity_provider","electricity_company","distribution_company","disco","data_plan_id","nifex_data_plan_id","nifex_plan_id","nifex_data_plan","nifex_plan_code","meter_number","meter_type","exam_type","quantity","denomination","smartcard","smartcard_number","iuc_number"]);
 function isInternalProviderField(field:ServiceField){
@@ -205,7 +206,7 @@ export default function RequestService(){
    {params.slug==="jamb-services"&&<div className="space-y-4 rounded-2xl border border-slate-200 p-4">
     <label className="block text-sm font-bold">JAMB service needed *
      <select required value={form.jamb_service_slug||""} onChange={e=>set("jamb_service_slug",e.target.value)} className="mt-2 w-full rounded-xl border border-slate-200 bg-white px-4 py-3">
-      <option value="">Choose a service</option>{jambServices.map(item=><option key={item.slug} value={item.slug}>{item.title} — ₦1,000</option>)}
+      <option value="">Choose a service</option>{jambServices.map(item=><option key={item.slug} value={item.slug}>{item.title} — ₦{(JAMB_SERVICE_PRICES[item.slug]??1000).toLocaleString()}</option>)}
      </select>
     </label>
     <label className="block text-sm font-bold">JAMB registration number (if available)<input value={form.jamb_registration_number||""} onChange={e=>set("jamb_registration_number",e.target.value)} className="mt-2 w-full rounded-xl border border-slate-200 px-4 py-3"/></label>
@@ -264,8 +265,6 @@ export default function RequestService(){
       {dataPlans.map(plan=><option key={plan.id} value={plan.id}>{plan.name}{plan.validity?" · "+plan.validity:""} — ₦{Number(plan.price).toLocaleString()}</option>)}
      </select>
     </label>
-    {plansError&&<p className="rounded-lg bg-amber-50 p-3 text-sm text-amber-900">Could not load live plans: {plansError}</p>}
-    {!plansLoading&&!plansError&&dataPlans.length===0&&<p className="text-sm text-slate-600">No plans were returned by Pairgate. The provider catalogue endpoint must be configured before data purchases can be enabled.</p>}
    </div>}
    {params.slug!=="jamb-services"&&fields.filter(f=>!(isVTU&&(isInternalProviderField(f)||["cable","electricity","exam","datapin"].includes(kind)||((kind==="data"||kind==="cable")&&f.field_key==="amount")||(kind==="data"&&f.field_key==="network")))).map(f=><label key={f.field_key} className="block text-sm font-bold">{f.label}{f.required&&<span className="text-red-500"> *</span>}{renderField(f)}</label>)}
    {isVTU&&providerAmount>0&&<div className="rounded-2xl bg-slate-50 p-4 text-sm"><div className="flex justify-between"><span>Provider amount</span><b>₦{providerAmount.toLocaleString()}</b></div><div className="mt-2 flex justify-between"><span>Service fee</span><b>₦{serviceFee.toLocaleString()}</b></div><div className="mt-3 flex justify-between border-t pt-3 text-base"><span className="font-black">Total to pay</span><b>₦{total.toLocaleString()}</b></div></div>}
