@@ -28,7 +28,8 @@ export default function RequeryPaymentButton({ orderId, disabled = false, paid =
   }
 
   return (
-    <div className="mt-2 rounded-2xl border border-slate-200 bg-slate-50 p-3">\n      {paid && <p className="mb-2 text-xs text-slate-600">Your payment is already recorded. This checks the payment record and safely retries delivery when Pairgate has explicitly rejected the previous attempt.</p>}
+    <div className="mt-2 rounded-2xl border border-slate-200 bg-slate-50 p-3">
+      {paid && <p className="mb-2 text-xs text-slate-600">Your payment is already recorded. This checks the payment record and safely retries delivery when Pairgate has explicitly rejected the previous attempt.</p>}
       <button type="button" onClick={requery} disabled={disabled || loading} className="rounded-xl bg-[#0757d5] px-4 py-2 text-sm font-bold text-white disabled:opacity-60">
         {loading ? (paid ? 'Requerying service…' : 'Checking Paystack…') : (paid ? 'Requery payment & retry service' : 'Check payment status')}
       </button>
