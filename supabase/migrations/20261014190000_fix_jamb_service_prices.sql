@@ -13,5 +13,5 @@ from public.services as s
 where o.service_id = s.id
   and upper(trim(coalesce(s.category, ''))) = 'JAMB'
   and s.slug <> 'jamb-services'
-  and coalesce(o.amount, 0) = 0
+  and coalesce(o.amount, 0) <> 1000
   and lower(coalesce(o.payment_status, '')) in ('unpaid', 'failed');
