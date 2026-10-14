@@ -17,8 +17,10 @@ export default function RequeryPaymentButton({ orderId, disabled = false, paid =
       });
       const data = await response.json();
       setResult(data);
-      if (data.ok || data.code === 'already_paid') {
+      if (!paid && (data.ok || data.code === 'already_paid')) {
         setTimeout(() => window.location.reload(), 700);
+      } else if (paid && data.fulfillment?.status === 'successful') {
+        setTimeout(() => window.location.reload(), 900);
       }
     } catch {
       setResult({ ok: false, message: 'Could not contact the payment service. Try again.' });
