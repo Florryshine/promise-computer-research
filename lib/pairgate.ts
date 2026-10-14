@@ -302,13 +302,13 @@ export async function fulfillOrder(orderId: string) {
     existing?.response?.data?.status === false ||
     existing?.response?.status === false ||
     ["failed", "failure", "error", "rejected", "declined", "cancelled"].includes(responseStatus) ||
-    Boolean(existing?.response?.error)
+    (Boolean(existing?.response?.error) && existing?.response?.ambiguous !== true && !/fetch failed|network|timeout|timed out|dns|socket|econn|connection reset/i.test(clean(existing?.response?.error)))
   ));
   // A confirmed provider rejection can be retried against the same paid order.
   // Unknown outcomes and transactions with a provider reference are status-checked,
   // never blindly resubmitted, to reduce the risk of duplicate delivery.
   const existingReference = clean(existing?.provider_reference || first(existing?.response?.data, "reference_code", "transaction_id", "transaction_reference", "reference"));
-  const retryableProviderRejection = explicitProviderRejection && !existingReference;
+  const retryableProviderRejection = explicitProviderRejection;
 
   if (existing && existing.response && Object.keys(existing.response).length > 0 && !retryableProviderRejection) {
     return checkPendingTransaction(admin, order, existing);
