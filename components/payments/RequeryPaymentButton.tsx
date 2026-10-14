@@ -2,7 +2,7 @@
 
 import { useState } from 'react';
 
-export default function RequeryPaymentButton({ orderId, disabled = false }: { orderId: string; disabled?: boolean }) {
+export default function RequeryPaymentButton({ orderId, disabled = false, paid = false }: { orderId: string; disabled?: boolean; paid?: boolean }) {
   const [loading, setLoading] = useState(false);
   const [result, setResult] = useState<any>(null);
 
@@ -28,9 +28,9 @@ export default function RequeryPaymentButton({ orderId, disabled = false }: { or
   }
 
   return (
-    <div className="mt-2 rounded-2xl border border-slate-200 bg-slate-50 p-3">
+    <div className="mt-2 rounded-2xl border border-slate-200 bg-slate-50 p-3">\n      {paid && <p className="mb-2 text-xs text-slate-600">Your payment is already recorded. This checks the payment record and safely retries delivery when Pairgate has explicitly rejected the previous attempt.</p>}
       <button type="button" onClick={requery} disabled={disabled || loading} className="rounded-xl bg-[#0757d5] px-4 py-2 text-sm font-bold text-white disabled:opacity-60">
-        {loading ? 'Checking Paystack…' : 'Check payment status'}
+        {loading ? (paid ? 'Requerying service…' : 'Checking Paystack…') : (paid ? 'Requery payment & retry service' : 'Check payment status')}
       </button>
       {result && (
         <div className="mt-3 text-sm">
