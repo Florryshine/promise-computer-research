@@ -117,14 +117,15 @@ export async function POST(request:Request){
    verifiedFormData={...verifiedFormData,network,provider_id:network,denomination,quantity,provider_amount:String(providerAmount),unit_price:String(denomination),service_fee:String(fee),service_fee_rate:"5%"};
   }
 
-  if(!Number.isFinite(finalAmount)||finalAmount<=0)return NextResponse.json({error:"Invalid order amount."},{status:400});
+  const requiresQuote=!VTU_SLUGS.has(slug)&&service.price_type!=="fixed"&&finalAmount===0;
+  if(!Number.isFinite(finalAmount)||finalAmount<0||(finalAmount===0&&!requiresQuote))return NextResponse.json({error:"Invalid order amount."},{status:400});
   const reference="PCR-"+Date.now().toString().slice(-10);
   const {data:order,error:insertError}=await admin.from("orders").insert({
    reference,customer_id:user.id,service_id:service.id,status:"pending",payment_status:"unpaid",
    amount:finalAmount,customer_note:customerNote||null,form_data:verifiedFormData
   }).select("id").single();
   if(insertError)throw insertError;
-  return NextResponse.json({id:order.id,amount:finalAmount});
+  return NextResponse.json({id:order.id,amount:finalAmount,quoteRequired:requiresQuote});
  }catch(error){
   const message=error instanceof Error?error.message:"Could not create the service request.";
   return NextResponse.json({error:message},{status:500});
