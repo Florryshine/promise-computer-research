@@ -50,7 +50,6 @@ export async function PATCH(request: Request) {
 
   const noteChanged = (order.admin_note || '') !== note;
   const statusChanged = order.status !== body.status;
-  const quoteChanged = isQuote && Number(order.amount || 0) !== quoteAmount;
   if (isQuote) {
     const quoteNote = note ? ' Note: ' + note : '';
     const { error: notificationError } = await admin.from('notifications').insert({
