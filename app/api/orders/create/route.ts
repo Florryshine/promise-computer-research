@@ -6,6 +6,7 @@ import {getPairgateDataPlans,pairgateRequest} from "@/lib/pairgate";
 const VTU_SLUGS=new Set(["airtime-recharge","data-subscription","dstv-subscription","gotv-subscription","startimes-subscription","electricity-bill","exam-pins","data-pins"]);
 const clean=(v:unknown)=>String(v??"").trim();
 const serviceFee=(amount:number,rate:number)=>Math.ceil(amount*rate/100);
+const EXAM_PIN_PRICES:Record<string,number>={waec:6500,neco:3000,nabt:1200};
 function rows(payload:any):any[]{
  const data=payload?.data??payload;
  if(Array.isArray(data))return data;
@@ -91,13 +92,14 @@ export async function POST(request:Request){
    const provider=clean(formData.exam_type||formData.provider_id).toLowerCase();
    const quantity=Number(formData.quantity||1);
    if(!["waec","neco","nabt"].includes(provider)||!Number.isInteger(quantity)||quantity<1||quantity>10)return NextResponse.json({error:"Choose WAEC, NECO or NABTEB and a quantity from 1 to 10."},{status:400});
-   if(service.price_type!=="fixed"||Number(service.price||0)<=0)return NextResponse.json({error:"Exam PIN selling price is not configured. Set the service's fixed price per PIN before accepting payment."},{status:503});
+   const unitPrice=EXAM_PIN_PRICES[provider]||0;
+   if(unitPrice<=0)return NextResponse.json({error:"No selling price is configured for this exam PIN type."},{status:503});
    const providerPayload=await pairgateRequest("/providers/education");
    if(!rows(providerPayload).some((p:any)=>String(p.slug??p.id??"").toLowerCase()===provider))return NextResponse.json({error:"Pairgate does not currently list that exam provider."},{status:400});
-   const providerAmount=Number(service.price)*quantity;
+   const providerAmount=unitPrice*quantity;
    const fee=serviceFee(providerAmount,5);
    finalAmount=providerAmount+fee;
-   verifiedFormData={...verifiedFormData,provider_id:provider,quantity,provider_amount:String(providerAmount),unit_price:String(service.price),service_fee:String(fee),service_fee_rate:"5%"};
+   verifiedFormData={...verifiedFormData,provider_id:provider,quantity,provider_amount:String(providerAmount),unit_price:String(unitPrice),service_fee:String(fee),service_fee_rate:"5%"};
   }
 
   if(slug==="data-pins"){
