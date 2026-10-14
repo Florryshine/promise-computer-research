@@ -7,7 +7,7 @@ const VTU_SLUGS=new Set(["airtime-recharge","data-subscription","dstv-subscripti
 const clean=(v:unknown)=>String(v??"").trim();
 const serviceFee=(amount:number,rate:number)=>Math.ceil(amount*rate/100);
 const EXAM_PIN_PRICES:Record<string,number>={waec:6500,neco:3000,nabt:1200};
-const JAMB_SERVICE_PRICES:Record<string,number>={"jamb-original-result-printing":1500,"jamb-admission-letter-printing":1500,"jamb-admission-status-checking":1500,"jamb-reprinting":1500,"jamb-olevel-screenshot":1500,"jamb-email-phone-screenshot":1500,"jamb-profile-code-retrieval":1500,"jamb-registration-number-retrieval":1500,"jamb-indemnity-form":1500};
+const JAMB_SERVICE_PRICES:Record<string,number>={"jamb-original-result-printing":1000,"jamb-admission-letter-printing":1000,"jamb-admission-status-checking":1000,"jamb-reprinting":1000,"jamb-olevel-screenshot":1000,"jamb-email-phone-screenshot":1000,"jamb-profile-code-retrieval":1000,"jamb-registration-number-retrieval":1000,"jamb-indemnity-form":1000};
 function rows(payload:any):any[]{
  const data=payload?.data??payload;
  if(Array.isArray(data))return data;
@@ -30,7 +30,7 @@ export async function POST(request:Request){
   if(serviceError)throw serviceError;
   if(!service)return NextResponse.json({error:"This service is no longer available."},{status:404});
 
-  let finalAmount=VTU_SLUGS.has(slug)?Number(body.amount||0):(String(service.category||"").trim().toUpperCase()==="JAMB"&&slug!=="jamb-services"?1500:JAMB_SERVICE_PRICES[slug]??(service.price_type==="fixed"?Number(service.price||0):0));
+  let finalAmount=VTU_SLUGS.has(slug)?Number(body.amount||0):(String(service.category||"").trim().toUpperCase()==="JAMB"&&slug!=="jamb-services"?1000:JAMB_SERVICE_PRICES[slug]??(service.price_type==="fixed"?Number(service.price||0):0));
   let verifiedFormData:Record<string,any>={...formData};
 
   if(slug==="airtime-recharge"){
