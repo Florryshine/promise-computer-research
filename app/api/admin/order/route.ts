@@ -16,8 +16,8 @@ export async function PATCH(request: Request) {
   if (!body.orderId || typeof body.orderId !== 'string') return NextResponse.json({ error: 'Order ID is required.' }, { status: 400 });
 
   const isQuote = body.quoteAmount !== undefined && body.quoteAmount !== null && String(body.quoteAmount).trim() !== '';
-  const quoteAmount = isQuote ? Number(body.quoteAmount) : null;
-  if (isQuote && (!Number.isFinite(quoteAmount) || quoteAmount! <= 0 || quoteAmount! > 100000000)) {
+  const quoteAmount = isQuote ? Number(body.quoteAmount) : 0;
+  if (isQuote && (!Number.isFinite(quoteAmount) || quoteAmount <= 0 || quoteAmount > 100000000)) {
     return NextResponse.json({ error: 'Enter a valid quote greater than ₦0.' }, { status: 400 });
   }
 
@@ -55,7 +55,7 @@ export async function PATCH(request: Request) {
     const { error: notificationError } = await admin.from('notifications').insert({
       user_id: order.customer_id,
       title: 'Your service quote is ready',
-      message: 'A quote of ₦' + Number(quoteAmount).toLocaleString('en-NG') + ' is ready for order ' + order.reference + '. Open My Orders to review and pay.' + quoteNote
+      message: 'A quote of ₦' + quoteAmount.toLocaleString('en-NG') + ' is ready for order ' + order.reference + '. Open My Orders to review and pay.' + quoteNote
     });
     if (notificationError) return NextResponse.json({ error: 'Quote saved, but customer notification failed: ' + notificationError.message }, { status: 500 });
   } else if (statusChanged || noteChanged) {
