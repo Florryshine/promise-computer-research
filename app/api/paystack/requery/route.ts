@@ -80,6 +80,15 @@ export async function POST(request: Request) {
     const { data: payment } = await admin.from('payments').select('id,order_id,reference,amount,currency,status,gateway_response,metadata').eq('order_id', order.id).order('created_at', { ascending: false }).limit(1).maybeSingle();
     if (!payment) return NextResponse.json({ ok: false, code: 'payment_not_found', message: 'No Paystack payment record exists for this order.' }, { status: 404 });
     if (payment.status === 'paid') {
+      // Repair the rare case where Paystack was recorded as paid but the order row
+      // did not get updated. Never ask the customer to pay a second time.
+      if (order.payment_status !== 'paid') {
+        const { error: syncError } = await admin.from('orders').update({
+          payment_status: 'paid',
+          status: ['completed', 'cancelled'].includes(String(order.status)) ? order.status : 'processing',
+        }).eq('id', order.id);
+        if (syncError) return NextResponse.json({ ok: false, code: 'order_sync_failed', message: 'Paystack already records this payment as paid, but PCR could not sync the order.', cause: syncError.message }, { status: 500 });
+      }
       try {
         const fulfillment = await fulfillOrder(order.id);
         const detail = fulfillment.message || ('result' in fulfillment && fulfillment.result ? JSON.stringify(fulfillment.result).slice(0, 300) : '');
