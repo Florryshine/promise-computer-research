@@ -11,6 +11,7 @@ type EpinDenomination={value:number;label:string};
 
 const VTU_SLUGS=new Set(["airtime-recharge","data-subscription","dstv-subscription","gotv-subscription","startimes-subscription","electricity-bill","exam-pins","data-pins"]);
 const FEE_RATE:Record<string,number>={airtime:3,data:5,cable:5,electricity:5,exam:5,datapin:5};
+const EXAM_PIN_PRICES:Record<string,number>={waec:6500,neco:3000,nabt:1200};
 
 const INTERNAL_PROVIDER_FIELDS=new Set(["provider_plan_id","plan_id","plan_code","variation_code","package","provider_amount","network_id","cablename_id","cable_provider_id","cableplan_id","disco_id","meter_type_id","provider_id","service_provider","electricity_provider","electricity_company","distribution_company","disco","data_plan_id","nifex_data_plan_id","nifex_plan_id","nifex_data_plan","nifex_plan_code","meter_number","meter_type","exam_type","quantity","denomination","smartcard","smartcard_number","iuc_number"]);
 function isInternalProviderField(field:ServiceField){
@@ -32,7 +33,8 @@ export default function RequestService(){
  const [epinDenominations,setEpinDenominations]=useState<EpinDenomination[]>([]),[epinLoading,setEpinLoading]=useState(false),[epinError,setEpinError]=useState("");
 
  const isVTU=VTU_SLUGS.has(params.slug);
- const examPriceConfigured=service?.price_type==="fixed"&&Number(service?.price)>0;
+ const examUnitPrice=EXAM_PIN_PRICES[String(form.exam_type||"").toLowerCase()]||0;
+ const examPriceConfigured=examUnitPrice>0;
  const kind=params.slug==="airtime-recharge"?"airtime":params.slug==="data-subscription"?"data":["dstv-subscription","gotv-subscription","startimes-subscription"].includes(params.slug)?"cable":params.slug==="electricity-bill"?"electricity":params.slug==="exam-pins"?"exam":params.slug==="data-pins"?"datapin":"";
  const set=(k:string,v:string)=>setForm(x=>({...x,[k]:v}));
 
@@ -117,7 +119,7 @@ export default function RequestService(){
 
 
 
-  const providerAmount=kind==="exam"?Number(service?.price||0)*Number(form.quantity||1):kind==="datapin"?Number(form.denomination||0)*Number(form.quantity||1):["airtime","electricity"].includes(kind)?Number(form.amount||0):Number(form.provider_amount||0);
+  const providerAmount=kind==="exam"?examUnitPrice*Number(form.quantity||1):kind==="datapin"?Number(form.denomination||0)*Number(form.quantity||1):["airtime","electricity"].includes(kind)?Number(form.amount||0):Number(form.provider_amount||0);
  const serviceFee=Math.ceil(providerAmount*(FEE_RATE[kind]||0)/100);
  const total=providerAmount+serviceFee;
 
@@ -228,7 +230,7 @@ export default function RequestService(){
      <select value={form.exam_type||""} onChange={e=>set("exam_type",e.target.value)} required disabled={utilityLoading||utilityProviders.length===0} className="mt-2 w-full rounded-xl border border-slate-200 bg-white px-4 py-3"><option value="">{utilityLoading?"Loading exam providers…":"Choose exam body"}</option>{utilityProviders.map(p=><option key={p.id} value={p.id}>{p.name}</option>)}</select>
     </label>
     <label className="block text-sm font-bold">Quantity *<input type="number" min="1" max="10" step="1" value={form.quantity||"1"} onChange={e=>set("quantity",e.target.value)} required className="mt-2 w-full rounded-xl border border-slate-200 px-4 py-3"/></label>
-    {examPriceConfigured?<p className="text-sm text-slate-600">Price per PIN: ₦{Number(service.price).toLocaleString()}. PINs are delivered after Pairgate completes processing.</p>:<p role="alert" className="rounded-lg bg-amber-50 p-3 text-sm text-amber-900">Price currently unavailable. The administrator must configure the selling price before WAEC/NECO/NABTEB PIN orders can be accepted. No payment will be taken until pricing is configured.</p>}
+    {examPriceConfigured?<p className="text-sm text-slate-600">Price per PIN: ₦{examUnitPrice.toLocaleString()}. PINs are delivered after Pairgate completes processing.</p>:<p role="alert" className="rounded-lg bg-amber-50 p-3 text-sm text-amber-900">Choose WAEC, NECO or NABTEB to see the PIN price.</p>}
     {utilityError&&<p className="rounded-lg bg-amber-50 p-3 text-sm text-amber-900">{utilityError}</p>}
    </div>}
    {kind==="datapin"&&<div className="space-y-4 rounded-2xl border border-slate-200 p-4">
