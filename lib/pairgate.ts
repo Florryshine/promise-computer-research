@@ -293,7 +293,7 @@ export async function fulfillOrder(orderId: string) {
 
   const baseRequestId = requestId(order);
   const { data: existing, error: existingError } = await admin.from("provider_transactions")
-    .select("*").eq("order_id", order.id).order("created_at", { ascending: false }).limit(1).maybeSingle();
+    .select("*").eq("order_id", order.id).eq("service_id", product.kind).order("created_at", { ascending: false }).limit(1).maybeSingle();
   if (existingError) throw existingError;
   if (existing?.status === "successful") return { status: "successful", message: "Already fulfilled.", transaction: existing };
 
@@ -305,9 +305,7 @@ export async function fulfillOrder(orderId: string) {
     (Boolean(existing?.response?.error) && existing?.response?.ambiguous !== true && !/fetch failed|network|timeout|timed out|dns|socket|econn|connection reset/i.test(clean(existing?.response?.error)))
   ));
   // A confirmed provider rejection can be retried against the same paid order.
-  // Unknown outcomes and transactions with a provider reference are status-checked,
-  // never blindly resubmitted, to reduce the risk of duplicate delivery.
-  const existingReference = clean(existing?.provider_reference || first(existing?.response?.data, "reference_code", "transaction_id", "transaction_reference", "reference"));
+  // Unknown outcomes are status-checked, never blindly resubmitted, to reduce duplicate delivery.
   const retryableProviderRejection = explicitProviderRejection;
 
   if (existing && existing.response && Object.keys(existing.response).length > 0 && !retryableProviderRejection) {
