@@ -4,7 +4,6 @@ import {createClient} from '@/lib/supabase/server';
 import {createAdminClient} from '@/lib/supabase/admin';
 import DocumentUpload from './DocumentUpload';
 import RequeryPaymentButton from '@/components/payments/RequeryPaymentButton';
-import RefreshProviderStatusButton from '@/components/orders/RefreshProviderStatusButton';
 
 export default async function OrderDetail({params}:{params:Promise<{id:string}>}){
   const {id}=await params;
@@ -52,11 +51,10 @@ export default async function OrderDetail({params}:{params:Promise<{id:string}>}
         <span className="rounded-full bg-blue-50 px-3 py-1 text-xs font-bold capitalize text-[#0757d5]">{String(order.status).replace('_',' ')}</span>
       </div>
       <div className="mt-5 grid gap-3 sm:grid-cols-2">
-        <div className="rounded-2xl bg-slate-50 p-4"><p className="text-xs font-bold text-slate-400">Payment</p><p className="mt-1 font-bold capitalize">{String(order.payment_status).replace('_',' ')}</p>{order.payment_status!=='paid'&&Number(order.amount||0)>0&&<RequeryPaymentButton orderId={order.id}/>}</div>
+        <div className="rounded-2xl bg-slate-50 p-4"><p className="text-xs font-bold text-slate-400">Payment</p><p className="mt-1 font-bold capitalize">{String(order.payment_status).replace('_',' ')}</p>{Number(order.amount||0)>0&&!['completed','cancelled'].includes(String(order.status))&&<RequeryPaymentButton orderId={order.id} paid={order.payment_status==='paid'}/>}</div>
         <div className="rounded-2xl bg-slate-50 p-4"><p className="text-xs font-bold text-slate-400">Amount</p><p className="mt-1 font-bold">₦{Number(order.amount||0).toLocaleString()}</p></div>
       </div>
       {order.admin_note&&<div className="mt-5 rounded-2xl border border-blue-100 bg-blue-50 p-4"><p className="text-xs font-black uppercase tracking-wide text-[#0757d5]">Update from Promise Computer Research</p><p className="mt-2 whitespace-pre-wrap text-sm text-slate-700">{order.admin_note}</p></div>}
-      {order.payment_status==='paid'&&!['completed','cancelled'].includes(String(order.status))&&<RefreshProviderStatusButton orderId={order.id}/>}
       <div className="mt-5">
         <p className="text-xs font-black uppercase tracking-wide text-slate-400">Submitted information</p>
         <div className="mt-3 grid gap-3 sm:grid-cols-2">{Object.entries(order.form_data||{}).map(([key,value])=><div key={key} className="rounded-2xl border border-slate-200 p-4"><p className="text-[11px] font-bold uppercase tracking-wide text-slate-400">{key.replaceAll('_',' ')}</p><p className="mt-1 whitespace-pre-wrap break-words text-sm font-semibold text-slate-700">{typeof value==="object"&&value!==null?JSON.stringify(value,null,2):String(value??"—")}</p></div>)}</div>
