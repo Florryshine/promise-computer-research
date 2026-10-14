@@ -78,7 +78,7 @@ export async function POST(request:Request){
    const purchaseAmount=Number(formData.amount||0);
    if(!provider||!/^\d{1,20}$/.test(meterNumber)||![1,2].includes(meterType)||purchaseAmount<1000)return NextResponse.json({error:"Choose a disco, enter a valid meter number/type and use at least ₦1,000."},{status:400});
    const providerPayload=await pairgateRequest("/providers/electricity");
-   if(!rows(providerPayload).some((p:any)=>String(p.slug||"").toLowerCase()===provider))return NextResponse.json({error:"Choose a valid electricity provider."},{status:400});
+   if(!rows(providerPayload).some((p:any)=>String(p.slug??p.id??"").toLowerCase()===provider))return NextResponse.json({error:"Choose a valid electricity provider."},{status:400});
    const verify=await pairgateRequest("/electricity/verify","POST",{provider_id:provider,meter_number:meterNumber,meter_type:meterType});
    const verification=verify?.data??verify;
    if(verification?.test_mode!==true&&verification?.status===false)return NextResponse.json({error:"Pairgate could not verify that meter. Check the provider, meter number and meter type."},{status:422});
