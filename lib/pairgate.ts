@@ -273,6 +273,7 @@ export async function fulfillOrder(orderId: string) {
     .eq("id", orderId).maybeSingle();
   if (error) throw error;
   if (!order) throw new Error("Order not found");
+  if (["completed", "cancelled"].includes(String(order.status))) return { status: order.status, message: "This order is already finalized. No new provider purchase was submitted." };
   if (order.payment_status !== "paid") return { status: "skipped", message: "Order is not paid." };
 
   const product = normalize(order);
