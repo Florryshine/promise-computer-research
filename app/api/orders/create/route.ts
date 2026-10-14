@@ -26,11 +26,11 @@ export async function POST(request:Request){
   const {data:{user}}=await supabase.auth.getUser();
   if(!user)return NextResponse.json({error:"You must be logged in."},{status:401});
   const admin=createAdminClient();
-  const {data:service,error:serviceError}=await admin.from("services").select("id,slug,title,price,price_type,active").eq("slug",slug).eq("active",true).maybeSingle();
+  const {data:service,error:serviceError}=await admin.from("services").select("id,slug,title,category,price,price_type,active").eq("slug",slug).eq("active",true).maybeSingle();
   if(serviceError)throw serviceError;
   if(!service)return NextResponse.json({error:"This service is no longer available."},{status:404});
 
-  let finalAmount=VTU_SLUGS.has(slug)?Number(body.amount||0):JAMB_SERVICE_PRICES[slug]??(service.price_type==="fixed"?Number(service.price||0):0);
+  let finalAmount=VTU_SLUGS.has(slug)?Number(body.amount||0):(String(service.category||"").trim().toUpperCase()==="JAMB"&&slug!=="jamb-services"?1500:JAMB_SERVICE_PRICES[slug]??(service.price_type==="fixed"?Number(service.price||0):0));
   let verifiedFormData:Record<string,any>={...formData};
 
   if(slug==="airtime-recharge"){

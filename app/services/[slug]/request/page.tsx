@@ -198,7 +198,7 @@ export default function RequestService(){
 
  return <main className="section bg-slate-50"><div className="container"><div className="mx-auto max-w-2xl rounded-3xl bg-white p-6 shadow-soft sm:p-8">
   <p className="text-xs font-bold uppercase tracking-[.16em] text-[#0757d5]">Service request</p><h1 className="mt-2 text-3xl font-black">{service.title}</h1>
-  <p className="mt-2 text-sm text-slate-500">{params.slug==="jamb-services"?"Choose the JAMB service you need. Your request will open WhatsApp for PCR to review; no payment is collected on this form.":isVTU?"Enter your details and continue to payment.":service.price_type==="fixed"&&service.price!=null?"Price: ₦"+Number(service.price).toLocaleString()+".":"Submit your details."}</p>
+  <p className="mt-2 text-sm text-slate-500">{params.slug==="jamb-services"?"Choose the JAMB service you need. Submit your request, pay securely online, and optionally send the order details to PCR on WhatsApp afterward.":isVTU?"Enter your details and continue to payment.":service.price_type==="fixed"&&service.price!=null?"Price: ₦"+Number(service.price).toLocaleString()+".":"Submit your details."}</p>
   {error&&<div className="mt-5 rounded-xl border border-red-200 bg-red-50 p-3 text-sm text-red-700">{error}</div>}
   <form onSubmit={submit} className="mt-7 space-y-5">
    {[["full_name","Full name","text"],["phone","Phone number","tel"],["email","Email","email"]].map(([k,l,t])=><label key={k} className="block text-sm font-bold">{l}<input required={k!=="email"} value={form[k]??""} onChange={e=>set(k,e.target.value)} type={t} className="mt-2 w-full rounded-xl border border-slate-200 px-4 py-3"/></label>)}
