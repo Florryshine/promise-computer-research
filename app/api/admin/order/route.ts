@@ -30,6 +30,7 @@ export async function PATCH(request: Request) {
 
   if (isQuote) {
     if (order.payment_status === 'paid') return NextResponse.json({ error: 'A paid order cannot be requoted.' }, { status: 409 });
+    if (['completed', 'cancelled'].includes(order.status)) return NextResponse.json({ error: 'Completed or cancelled orders cannot be requoted.' }, { status: 409 });
     if (order.payment_status === 'pending') return NextResponse.json({ error: 'A payment is already in progress. Verify or resolve that payment before changing the quote.' }, { status: 409 });
     const { data: pendingPayment, error: paymentLookupError } = await admin.from('payments')
       .select('reference').eq('order_id', order.id).eq('status', 'pending').limit(1).maybeSingle();
@@ -50,7 +51,7 @@ export async function PATCH(request: Request) {
   const noteChanged = (order.admin_note || '') !== note;
   const statusChanged = order.status !== body.status;
   const quoteChanged = isQuote && Number(order.amount || 0) !== quoteAmount;
-  if (isQuote && (quoteChanged || noteChanged)) {
+  if (isQuote) {
     const quoteNote = note ? ' Note: ' + note : '';
     const { error: notificationError } = await admin.from('notifications').insert({
       user_id: order.customer_id,
