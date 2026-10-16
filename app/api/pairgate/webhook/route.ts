@@ -111,7 +111,8 @@ export async function POST(request: Request) {
           " | " + String(childEvent.item || event.item || "") + " | " + String(child.status || "pending");
       });
       const childTransactions = childRows || [];
-      const allDone = childTransactions.length > 0 && childTransactions.every((row: any) => {
+      const expectedPinCount = Math.max(1, Number(order.form_data?.quantity || 1));
+      const allDone = childTransactions.length >= expectedPinCount && childTransactions.every((row: any) => {
         const childEvent = row.response?.webhook || row.response?.data || row.response || {};
         return row.status === "successful" && Boolean(childEvent.pin || childEvent.token || childEvent.voucher_code || childEvent.electricity_token || childEvent.meter_token || childEvent.token_number || (Array.isArray(childEvent.pins) && childEvent.pins.some((pin: any) => pin?.pin || pin?.voucher_code)));
       });
