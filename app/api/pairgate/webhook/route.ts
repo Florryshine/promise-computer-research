@@ -70,7 +70,9 @@ export async function POST(request: Request) {
       const { data: testOrder, error: testOrderLoadError } = await admin.from("orders")
         .select("id,form_data").eq("id", tx.order_id).maybeSingle();
       if (testOrderLoadError) throw testOrderLoadError;
-      if (testOrder) {
+      // Only update an order still marked as awaiting a test-mode retry. A delayed
+      // webhook from an old test attempt must never overwrite a newer live delivery.
+      if (testOrder?.form_data?.pairgate_test_mode === true) {
         const { error: testOrderUpdateError } = await admin.from("orders").update({
           status: "needs_information",
           admin_note: "A Pairgate TEST MODE webhook was received. It is not proof of live fulfilment; no token/PIN from this event was accepted. Switch to live mode and deliberately retry this already-paid order.",
