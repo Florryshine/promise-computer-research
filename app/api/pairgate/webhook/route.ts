@@ -43,7 +43,7 @@ export async function POST(request: Request) {
     if (!tx) {
       const clientReference = String(event.client_reference || event.reference || event.request_id || referenceCode).trim();
       const fallback = await admin.from("provider_transactions")
-        .select("request_id,order_id,status,response,service_id,provider_reference")
+        .select("request_id,order_id,status,response,service_id,provider_reference,request_data")
         .eq("request_id", clientReference).maybeSingle();
       if (fallback.error) throw fallback.error;
       tx = fallback.data;
