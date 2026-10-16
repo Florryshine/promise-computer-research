@@ -107,16 +107,23 @@ export async function POST(request:Request){
    const matchedProvider=providers.find((p:any)=>{
     const identity=String(p.slug??p.id??"").toLowerCase();
     const name=String(p.name??"").toLowerCase();
-    return identity===submittedProvider||name===submittedProvider;
+    return identity===submittedProvider||name===submittedProvider||
+      canonicalExamProvider(identity)===canonicalExamProvider(submittedProvider)||
+      canonicalExamProvider(name)===canonicalExamProvider(submittedProvider);
    });
+   // Prices are fixed by PCR, so a Pairgate catalogue label/ID mismatch must
+   // never turn a priced exam PIN into a zero-amount quote order.
    const provider=canonicalExamProvider(submittedProvider)||canonicalExamProvider(matchedProvider?.name)||canonicalExamProvider(matchedProvider?.slug);
-   if(!provider||!matchedProvider)return NextResponse.json({error:"Choose a currently available WAEC, NECO or NABTEB PIN provider."},{status:400});
+   if(!provider)return NextResponse.json({error:"Choose WAEC, NECO or NABTEB."},{status:400});
    const unitPrice=EXAM_PIN_PRICES[provider]||0;
    if(unitPrice<=0)return NextResponse.json({error:"No selling price is configured for this exam PIN type."},{status:503});
    const providerAmount=unitPrice*quantity;
    const fee=serviceFee(providerAmount,5);
    finalAmount=providerAmount+fee;
-   verifiedFormData={...verifiedFormData,exam_type:provider,provider_id:provider,quantity,provider_amount:String(providerAmount),unit_price:String(unitPrice),service_fee:String(fee),service_fee_rate:"5%"};
+   // Preserve the actual provider ID returned by Pairgate when available, but
+   // keep exam_type canonical for PCR pricing and fulfilment validation.
+   const pairgateProviderId=clean(matchedProvider?.slug??matchedProvider?.id??provider);
+   verifiedFormData={...verifiedFormData,exam_type:provider,provider_id:pairgateProviderId,quantity,provider_amount:String(providerAmount),unit_price:String(unitPrice),service_fee:String(fee),service_fee_rate:"5%"};
   }
 
   if(slug==="data-pins"){
