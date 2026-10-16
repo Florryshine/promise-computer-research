@@ -21,7 +21,16 @@ export function pairgateConfigured() {
 export async function pairgateRequest(path: string, method: "GET" | "POST" = "GET", params?: Record<string, unknown>, useTestMode = TEST_MODE) {
   if (!API_KEY) throw new Error("Pairgate API key is missing. Set PAIRGATE_API_KEY in Vercel.");
   const cleanPath = path.replace(/^\/+/, "");
-  const testPath = useTestMode && !cleanPath.startsWith("test/") ? "test/" + cleanPath : cleanPath;
+  // Only endpoints documented by Pairgate as testable should be prefixed.
+  // Catalogues and wallet/provider discovery endpoints remain on their normal paths.
+  const testableEndpoints = new Set([
+    "airtime/purchase", "data/purchase", "cable/purchase", "electricity/purchase",
+    "education/purchase", "epin/purchase", "transaction/status",
+    "electricity/verify", "cable/verify"
+  ]);
+  const testPath = useTestMode && testableEndpoints.has(cleanPath) && !cleanPath.startsWith("test/")
+    ? "test/" + cleanPath
+    : cleanPath;
   const url = new URL(testPath, BASE_URL + "/");
   const options: RequestInit = {
     method,
@@ -308,7 +317,13 @@ async function checkPendingTransaction(admin: any, order: any, transaction: any)
     return { status: "pending", message: "Pairgate was contacted but did not return a transaction reference. Check Pairgate history before any retry." };
   }
   try {
-    const result = await pairgateRequest("/transaction/status", "GET", { reference_code: referenceCode });
+    const transactionWasTestMode = Boolean(
+      transaction.response?.test_mode === true ||
+      transaction.response?.retryable_test_attempt === true ||
+      transaction.response?.data?.test_mode === true ||
+      transaction.response?.data?.data?.test_mode === true
+    );
+    const result = await pairgateRequest("/transaction/status", "GET", { reference_code: referenceCode }, transactionWasTestMode);
     const status = (TEST_MODE || isTestModePayload(result)) ? "pending" : statusOf(result);
     await updateFinalStatus(admin, order, transaction, status, result);
     const service = Array.isArray(order.services) ? order.services[0] : order.services;
