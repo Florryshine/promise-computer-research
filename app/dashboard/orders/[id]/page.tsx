@@ -47,7 +47,9 @@ export default async function OrderDetail({params}:{params:Promise<{id:string}>}
   const expectedPins = Math.max(1, Number(order.form_data?.quantity || 1));
   const savedPinsText = typeof order.form_data?.delivery_pins === 'string' ? order.form_data.delivery_pins : '';
   const deliveredPinCount = Math.max((savedPinsText.match(/PIN:\s*(?!pending\b)[^|\n]+/gi) || []).length, typeof order.form_data?.delivery_pin === 'string' && order.form_data.delivery_pin.trim() ? 1 : 0);
-  const missingRequiredDelivery = service?.slug === 'electricity-bill'
+  const missingRequiredDelivery = order.form_data?.pairgate_test_mode === true
+    ? true
+    : service?.slug === 'electricity-bill'
     ? !(typeof order.form_data?.delivery_pin === 'string' && order.form_data.delivery_pin.trim())
     : service?.slug === 'exam-pins'
     ? deliveredPinCount < expectedPins || /PIN pending/i.test(savedPinsText)
