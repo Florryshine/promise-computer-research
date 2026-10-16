@@ -146,9 +146,23 @@ export async function POST(request:Request){
   const {data:order,error:insertError}=await admin.from("orders").insert({
    reference,customer_id:user.id,service_id:service.id,status:"pending",payment_status:"unpaid",
    amount:finalAmount,customer_note:customerNote||null,form_data:verifiedFormData
-  }).select("id").single();
+  }).select("id,amount").single();
   if(insertError)throw insertError;
-  return NextResponse.json({id:order.id,amount:finalAmount,quoteRequired:requiresQuote});
+
+  // Server-priced services must persist exactly the amount calculated above.
+  // A database trigger or schema rule that rewrites it must not leave a
+  // zero-priced order stranded as "Awaiting quote".
+  if(VTU_SLUGS.has(slug)&&Number(order.amount)!==finalAmount){
+   const {error:deleteError}=await admin.from("orders").delete().eq("id",order.id);
+   if(deleteError){
+    console.error("Order amount integrity check failed and cleanup failed",{
+     orderId:order.id,slug,expectedAmount:finalAmount,storedAmount:order.amount,deleteError
+    });
+   }
+   return NextResponse.json({error:"The order price could not be saved correctly. Please try again or contact support."},{status:500});
+  }
+
+  return NextResponse.json({id:order.id,amount:Number(order.amount),quoteRequired:requiresQuote});
  }catch(error){
   const message=error instanceof Error?error.message:"Could not create the service request.";
   return NextResponse.json({error:message},{status:500});
