@@ -190,7 +190,7 @@ create table if not exists public.provider_transactions (
   response jsonb not null default '{}'::jsonb,
   request_data jsonb not null default '{}'::jsonb,
   created_at timestamptz not null default now(),
-  updated_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
   -- Intentionally no unique(order_id, provider): exam orders create multiple child PIN transactions.
 );
 create index if not exists provider_transactions_order_id_idx on public.provider_transactions(order_id);
