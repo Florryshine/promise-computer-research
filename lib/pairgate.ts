@@ -235,17 +235,22 @@ async function updateFinalStatus(admin: any, order: any, transaction: any, statu
     ? rawDeliveredPin.split("<=>").map((part: string, index: number) => (index === 0 ? "PIN: " : "Serial: ") + part.trim()).filter((part: string) => !part.endsWith(": ")).join(" | ")
     : rawDeliveredPin;
   const pins = Array.isArray(providerData?.pins) ? providerData.pins : [];
-  const pinText = pins.map((item: any) => [
-    item.pin ? "PIN: " + item.pin : "",
-    item.serial ? "Serial: " + item.serial : "",
-    item.denomination ? "Denomination: ₦" + item.denomination : ""
-  ].filter(Boolean).join(" | ")).join("\n");
+  const pinText = pins.map((item: any) => {
+    const raw = clean(first(item, "pin", "pin_code", "voucher_code", "token"));
+    const serial = clean(first(item, "serial", "serial_number"));
+    return raw.includes("<=>")
+      ? raw.split("<=>").map((part: string, index: number) => (index === 0 ? "PIN: " : "Serial: ") + part.trim()).filter((part: string) => !part.endsWith(": ")).join(" | ")
+      : [raw ? "PIN: " + raw : "", serial ? "Serial: " + serial : "", item.denomination ? "Denomination: ₦" + item.denomination : ""].filter(Boolean).join(" | ");
+  }).filter(Boolean).join("\n");
   const tokenRequired = slug === "electricity-bill";
   const pinRequired = slug === "exam-pins";
+  const expectedPinCount = Math.max(1, Number(order.form_data?.quantity || 1));
+  const scalarPin = clean(first(providerData, "pin", "voucher_code", "token"));
+  const deliveredPinCount = pins.filter((item: any) => Boolean(first(item, "pin", "pin_code", "voucher_code", "token") || first(item, "serial", "serial_number"))).length || (scalarPin ? 1 : 0);
   const hasDeliveryData = tokenRequired
     ? Boolean(clean(first(providerData, "token", "electricity_token", "meter_token", "token_number", "voucher_code")))
     : pinRequired
-    ? Boolean(clean(first(providerData, "pin", "voucher_code", "token")) || pins.some((item: any) => Boolean(item?.pin || item?.voucher_code)))
+    ? deliveredPinCount >= expectedPinCount
     : Boolean(deliveredPin || pinText);
   // A provider's generic "successful" status is not proof that the customer
   // received the electricity token or exam PIN. Keep it re-checkable until
