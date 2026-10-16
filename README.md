@@ -45,7 +45,8 @@ Airtime and mobile-data fulfilment use the server-side Pairgate adapter in `lib/
 Required Vercel environment variables:
 - `PAIRGATE_API_KEY` — Pairgate API key; server-side only, never use a `NEXT_PUBLIC_` prefix.
 - `PAIRGATE_BASE_URL` — optional; defaults to `https://pairgate.com/api/v1`.
-- `PAIRGATE_TEST_MODE` — defaults to `true`; requests use Pairgate's documented `/test` endpoints while true. Set explicitly to `false` in the production environment only after confirming test responses, configuring the webhook secret/URL, and approving live fulfilment. Orders created in test mode are not proof of a live provider purchase and require a deliberate retry after switching to live mode.
+- `PAIRGATE_TEST_MODE` — defaults to `true`; only supported purchase/verification/status endpoints use Pairgate's `/test` routes while true. Set explicitly to `false` in the production environment only after confirming test responses and approving live fulfilment. Orders created in test mode are not proof of a live provider purchase and require a deliberate retry after switching to live mode.
+- `PAIRGATE_WEBHOOK_SECRET` — required by the current webhook route. Enable webhook signature verification in Pairgate, copy the generated secret into Vercel, and configure the webhook URL as `https://<your-production-domain>/api/pairgate/webhook`. If the secret is missing or mismatched, the webhook will be rejected and asynchronous electricity tokens/exam PINs may not be delivered to the order.
 
 Pairgate fulfilment code covers airtime, mobile data, cable TV, electricity, exam PINs and data PINs. Before live use, verify each service against Pairgate's current API/catalogue and webhook payloads. Electricity and exam-PIN orders must remain processing until actual delivery details are saved; test-mode responses are never proof of live fulfilment. Paystack remains the customer payment gateway; Pairgate is the fulfilment provider.
 
