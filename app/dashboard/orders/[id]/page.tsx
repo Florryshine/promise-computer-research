@@ -44,7 +44,6 @@ export default async function OrderDetail({params}:{params:Promise<{id:string}>}
     };
   }));
 
-  const service = Array.isArray(order.services) ? order.services[0] : order.services;
   const expectedPins = Math.max(1, Number(order.form_data?.quantity || 1));
   const savedPinsText = typeof order.form_data?.delivery_pins === 'string' ? order.form_data.delivery_pins : '';
   const deliveredPinCount = Math.max((savedPinsText.match(/PIN:\s*(?!pending\b)[^|\n]+/gi) || []).length, typeof order.form_data?.delivery_pin === 'string' && order.form_data.delivery_pin.trim() ? 1 : 0);
