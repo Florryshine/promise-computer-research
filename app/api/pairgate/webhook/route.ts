@@ -111,7 +111,7 @@ export async function POST(request: Request) {
     if (updateTxError) throw updateTxError;
 
     const { data: order, error: orderError } = await admin.from("orders")
-      .select("id,reference,customer_id,form_data,services(title,slug)")
+      .select("id,reference,status,customer_id,form_data,services(title,slug)")
       .eq("id", tx.order_id).maybeSingle();
     if (orderError) throw orderError;
     if (!order) return NextResponse.json({ received: true });
