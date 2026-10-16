@@ -311,8 +311,25 @@ export async function fulfillOrder(orderId: string) {
     .eq("id", orderId).maybeSingle();
   if (error) throw error;
   if (!order) throw new Error("Order not found");
-  if (["completed", "cancelled"].includes(String(order.status))) return { status: order.status, message: "This order is already finalized. No new provider purchase was submitted." };
+  if (String(order.status) === "cancelled") return { status: "cancelled", message: "This order is cancelled. No provider purchase was submitted." };
   if (order.payment_status !== "paid") return { status: "skipped", message: "Order is not paid." };
+
+  const service = Array.isArray(order.services) ? order.services[0] : order.services;
+  const slug = String(service?.slug || "");
+  const savedPin = clean(order.form_data?.delivery_pin);
+  const savedPinsText = clean(order.form_data?.delivery_pins);
+  const expectedPins = Math.max(1, Number(order.form_data?.quantity || 1));
+  const deliveredPinCount = (savedPinsText.match(/PIN:\s*(?!pending\b)[^|\n]+/gi) || []).length;
+  const hasRequiredDelivery = slug === "electricity-bill"
+    ? Boolean(savedPin)
+    : slug === "exam-pins"
+    ? deliveredPinCount >= expectedPins && !/PIN pending/i.test(savedPinsText)
+    : true;
+  // Repair legacy orders that were incorrectly marked completed without the
+  // actual electricity token or all requested exam PINs.
+  if (String(order.status) === "completed" && hasRequiredDelivery) {
+    return { status: "completed", message: "This order already has its required delivery details." };
+  }
 
   const product = normalize(order);
   if (!product) return markNeedsAttention(admin, order, "This service is not yet enabled in the Pairgate adapter. Airtime and mobile data are supported in this integration pass; other services need their exact Pairgate fields/catalogues before automation.");
@@ -334,7 +351,7 @@ export async function fulfillOrder(orderId: string) {
   const { data: existing, error: existingError } = await admin.from("provider_transactions")
     .select("*").eq("order_id", order.id).eq("service_id", product.kind).order("created_at", { ascending: false }).limit(1).maybeSingle();
   if (existingError) throw existingError;
-  if (existing?.status === "successful") return { status: "successful", message: "Already fulfilled.", transaction: existing };
+  if (existing?.status === "successful" && hasRequiredDelivery) return { status: "successful", message: "Already fulfilled with delivery details.", transaction: existing };
 
   const responseStatus = clean(existing?.response?.data?.status ?? existing?.response?.status).toLowerCase();
   const testModeAttempt = Boolean(existing && (
