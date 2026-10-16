@@ -231,9 +231,13 @@ async function updateFinalStatus(admin: any, order: any, transaction: any, statu
     item.serial ? "Serial: " + item.serial : "",
     item.denomination ? "Denomination: ₦" + item.denomination : ""
   ].filter(Boolean).join(" | ")).join("\n");
-  const hasDeliveryData = Boolean(deliveredPin || pinText);
   const tokenRequired = slug === "electricity-bill";
   const pinRequired = slug === "exam-pins";
+  const hasDeliveryData = tokenRequired
+    ? Boolean(clean(first(providerData, "token", "electricity_token", "meter_token", "token_number", "voucher_code")))
+    : pinRequired
+    ? Boolean(clean(first(providerData, "pin", "voucher_code", "token")) || pins.some((item: any) => Boolean(item?.pin || item?.voucher_code)))
+    : Boolean(deliveredPin || pinText);
   // A provider's generic "successful" status is not proof that the customer
   // received the electricity token or exam PIN. Keep it re-checkable until
   // the actual deliverable is present.
