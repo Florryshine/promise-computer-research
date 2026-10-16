@@ -191,9 +191,10 @@ create table if not exists public.provider_transactions (
   request_data jsonb not null default '{}'::jsonb,
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now(),
-  unique(order_id, provider)
+  -- Intentionally no unique(order_id, provider): exam orders create multiple child PIN transactions.
 );
 create index if not exists provider_transactions_order_id_idx on public.provider_transactions(order_id);
+create index if not exists provider_transactions_order_provider_idx on public.provider_transactions(order_id, provider);
 create index if not exists provider_transactions_provider_reference_idx on public.provider_transactions(provider_reference);
 alter table public.provider_transactions enable row level security;
 drop policy if exists "users can view own provider transactions" on public.provider_transactions;
