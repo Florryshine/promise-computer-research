@@ -159,6 +159,11 @@ export default function RequestService(){
    const providerAliases=["provider_id","disco_id","service_provider","electricity_provider","electricity_company","distribution_company","disco"];
    const missing=fields.find(f=>{
     if(!f.required||String(form[f.field_key]??"").trim())return false;
+    // These VTU forms render their own provider/amount/quantity controls above.
+    // Their legacy service_fields rows are intentionally hidden, so validating
+    // those hidden required fields blocks checkout even after the customer has
+    // selected WAEC/NECO/NABTEB in the visible exam selector.
+    if(kind==="exam")return false;
     if(!isVTU||isInternalProviderField(f))return !isVTU;
     if(["data","cable","electricity","exam","datapin"].includes(kind)&&f.field_key==="amount")return false;
     if(kind==="data"&&f.field_key==="network")return false;
