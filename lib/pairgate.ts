@@ -6,6 +6,9 @@ const API_KEY = (process.env.PAIRGATE_API_KEY || "").trim();
 const TEST_MODE = (process.env.PAIRGATE_TEST_MODE || "true").toLowerCase() === "true";
 
 function clean(value: unknown) { return String(value ?? "").trim(); }
+function isTestModePayload(payload: any): boolean {
+  return payload?.test_mode === true || payload?.data?.test_mode === true || payload?.data?.data?.test_mode === true;
+}
 function first(object: any, ...keys: string[]) {
   for (const key of keys) if (object?.[key] !== undefined && object?.[key] !== null && clean(object[key])) return object[key];
   return "";
@@ -290,7 +293,7 @@ async function checkPendingTransaction(admin: any, order: any, transaction: any)
   }
   try {
     const result = await pairgateRequest("/transaction/status", "GET", { reference_code: referenceCode });
-    const status = result?.data?.test_mode === true ? "pending" : statusOf(result);
+    const status = isTestModePayload(result) ? "pending" : statusOf(result);
     await updateFinalStatus(admin, order, transaction, status, result);
     return { status, result, message: status === "pending" ? "Pairgate transaction is still processing. It was not resubmitted." : "Pairgate transaction status checked: " + status + "." };
   } catch (error) {
@@ -417,7 +420,7 @@ export async function fulfillOrder(orderId: string) {
 
   const nested = result?.data ?? result;
   const providerReference = clean(first(nested, "reference_code", "transaction_id", "transaction_reference", "reference"));
-  const testMode = nested?.test_mode === true || result?.test_mode === true;
+  const testMode = isTestModePayload(result);
   const status = testMode ? "pending" : statusOf(result);
   const transaction = {
     request_id: rid,
