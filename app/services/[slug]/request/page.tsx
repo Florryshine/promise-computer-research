@@ -12,6 +12,13 @@ type EpinDenomination={value:number;label:string};
 const VTU_SLUGS=new Set(["airtime-recharge","data-subscription","dstv-subscription","gotv-subscription","startimes-subscription","electricity-bill","exam-pins","data-pins"]);
 const FEE_RATE:Record<string,number>={airtime:3,data:5,cable:5,electricity:5,exam:5,datapin:5};
 const EXAM_PIN_PRICES:Record<string,number>={waec:5800,neco:2200,nabt:1500};
+function canonicalExamProvider(value:unknown){
+ const text=String(value??"").trim().toLowerCase();
+ if(text.includes("waec"))return "waec";
+ if(text.includes("neco"))return "neco";
+ if(text.includes("nabteb")||text==="nabt")return "nabt";
+ return "";
+}
 
 const INTERNAL_PROVIDER_FIELDS=new Set(["provider_plan_id","plan_id","plan_code","variation_code","package","provider_amount","network_id","cablename_id","cable_provider_id","cableplan_id","disco_id","meter_type_id","provider_id","service_provider","electricity_provider","electricity_company","distribution_company","disco","data_plan_id","nifex_data_plan_id","nifex_plan_id","nifex_data_plan","nifex_plan_code","meter_number","meter_type","exam_type","quantity","denomination","smartcard","smartcard_number","iuc_number"]);
 function isInternalProviderField(field:ServiceField){
@@ -230,7 +237,7 @@ export default function RequestService(){
    </div>}
    {kind==="electricity"&&<div className="space-y-4 rounded-2xl border border-slate-200 p-4">
     <label className="block text-sm font-bold">Electricity provider *
-     <select value={form.provider_id||form.disco_id||form.electricity_provider||form.service_provider||""} onChange={e=>setForm(x=>({...x,provider_id:e.target.value,disco_id:e.target.value,electricity_provider:e.target.value,service_provider:e.target.value,electricity_company:e.target.value,distribution_company:e.target.value,disco:e.target.value}))} required disabled={utilityLoading||utilityProviders.length===0} className="mt-2 w-full rounded-xl border border-slate-200 bg-white px-4 py-3"><option value="">{utilityLoading?"Loading providers…":"Choose your electricity provider"}</option>{utilityProviders.map(p=><option key={p.id} value={p.id}>{p.name}</option>)}</select>
+     <select value={form.provider_id||form.disco_id||form.electricity_provider||form.service_provider||""} onChange={e=>setForm(x=>({...x,provider_id:e.target.value,disco_id:e.target.value,electricity_provider:e.target.value,service_provider:e.target.value,electricity_company:e.target.value,distribution_company:e.target.value,disco:e.target.value}))} required disabled={utilityLoading||utilityProviders.length===0} className="mt-2 w-full rounded-xl border border-slate-200 bg-white px-4 py-3"><option value="">{utilityLoading?"Loading providers…":"Choose your electricity provider"}</option>{utilityProviders.filter(p=>canonicalExamProvider(p.name)||canonicalExamProvider(p.id)).map(p=>{const provider=canonicalExamProvider(p.name)||canonicalExamProvider(p.id);return <option key={p.id} value={provider}>{p.name}</option>})}</select>
     </label>
     <label className="block text-sm font-bold">Meter number *<input value={form.meter_number||""} onChange={e=>set("meter_number",e.target.value)} required inputMode="numeric" className="mt-2 w-full rounded-xl border border-slate-200 px-4 py-3"/></label>
     <label className="block text-sm font-bold">Meter type *

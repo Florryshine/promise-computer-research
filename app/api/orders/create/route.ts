@@ -90,17 +90,33 @@ export async function POST(request:Request){
   }
 
   if(slug==="exam-pins"){
-   const provider=clean(formData.exam_type||formData.provider_id).toLowerCase();
+   const canonicalExamProvider=(value:unknown)=>{
+    const text=clean(value).toLowerCase();
+    if(text.includes("waec"))return "waec";
+    if(text.includes("neco"))return "neco";
+    if(text.includes("nabteb")||text==="nabt")return "nabt";
+    return "";
+   };
+   const submittedProvider=clean(formData.exam_type||formData.provider_id).toLowerCase();
    const quantity=Number(formData.quantity||1);
-   if(!["waec","neco","nabt"].includes(provider)||!Number.isInteger(quantity)||quantity<1||quantity>10)return NextResponse.json({error:"Choose WAEC, NECO or NABTEB and a quantity from 1 to 10."},{status:400});
+   if(!Number.isInteger(quantity)||quantity<1||quantity>10)return NextResponse.json({error:"Choose WAEC, NECO or NABTEB and a quantity from 1 to 10."},{status:400});
+   const providerPayload=await pairgateRequest("/providers/education");
+   const providers=rows(providerPayload);
+   // Accept canonical slugs from the form, or resolve a provider ID from Pairgate
+   // to its name. Provider IDs are not guaranteed to be "waec", "neco" or "nabt".
+   const matchedProvider=providers.find((p:any)=>{
+    const identity=String(p.slug??p.id??"").toLowerCase();
+    const name=String(p.name??"").toLowerCase();
+    return identity===submittedProvider||name===submittedProvider;
+   });
+   const provider=canonicalExamProvider(submittedProvider)||canonicalExamProvider(matchedProvider?.name)||canonicalExamProvider(matchedProvider?.slug);
+   if(!provider||!matchedProvider)return NextResponse.json({error:"Choose a currently available WAEC, NECO or NABTEB PIN provider."},{status:400});
    const unitPrice=EXAM_PIN_PRICES[provider]||0;
    if(unitPrice<=0)return NextResponse.json({error:"No selling price is configured for this exam PIN type."},{status:503});
-   const providerPayload=await pairgateRequest("/providers/education");
-   if(!rows(providerPayload).some((p:any)=>{const identity=String(p.slug??p.id??"").toLowerCase();const name=String(p.name??"").toLowerCase();const canonical=(value:string)=>value.includes("waec")?"waec":value.includes("neco")?"neco":value.includes("nabteb")||value==="nabt"?"nabt":value;return canonical(identity)===provider||canonical(name)===provider;}))return NextResponse.json({error:"Pairgate does not currently list that exam provider."},{status:400});
    const providerAmount=unitPrice*quantity;
    const fee=serviceFee(providerAmount,5);
    finalAmount=providerAmount+fee;
-   verifiedFormData={...verifiedFormData,provider_id:provider,quantity,provider_amount:String(providerAmount),unit_price:String(unitPrice),service_fee:String(fee),service_fee_rate:"5%"};
+   verifiedFormData={...verifiedFormData,exam_type:provider,provider_id:provider,quantity,provider_amount:String(providerAmount),unit_price:String(unitPrice),service_fee:String(fee),service_fee_rate:"5%"};
   }
 
   if(slug==="data-pins"){
