@@ -117,7 +117,6 @@ export async function POST(request: Request) {
     if (!order) return NextResponse.json({ received: true });
 
     const service = Array.isArray(order.services) ? order.services[0] : order.services;
-    const needsDeliveryValue = service?.slug === "electricity-bill" || service?.slug === "exam-pins";
     const savedPinsText = typeof order.form_data?.delivery_pins === "string" ? order.form_data.delivery_pins : "";
     const expectedPinCount = Math.max(1, Number(order.form_data?.quantity || 1));
     const savedPinCount = Math.max((savedPinsText.match(/PIN:\s*(?!pending\b)[^|\n]+/gi) || []).length, order.form_data?.delivery_pin ? 1 : 0);
