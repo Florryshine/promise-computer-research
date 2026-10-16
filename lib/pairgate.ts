@@ -212,7 +212,10 @@ async function updateFinalStatus(admin: any, order: any, transaction: any, statu
   const providerMessage = clean(first(providerData, "message", "status")) || status;
   const service = Array.isArray(order.services) ? order.services[0] : order.services;
   const slug = String(service?.slug || "");
-  const deliveredPin = clean(first(providerData, "pin", "token", "electricity_token", "meter_token", "token_number", "voucher_code"));
+  const rawDeliveredPin = clean(first(providerData, "pin", "token", "electricity_token", "meter_token", "token_number", "voucher_code"));
+  const deliveredPin = slug === "exam-pins" && rawDeliveredPin.includes("<=>")
+    ? rawDeliveredPin.split("<=>").map((part: string, index: number) => (index === 0 ? "PIN: " : "Serial: ") + part.trim()).filter((part: string) => !part.endsWith(": ")).join(" | ")
+    : rawDeliveredPin;
   const pins = Array.isArray(providerData?.pins) ? providerData.pins : [];
   const pinText = pins.map((item: any) => [
     item.pin ? "PIN: " + item.pin : "",
@@ -293,7 +296,7 @@ async function checkPendingTransaction(admin: any, order: any, transaction: any)
   }
   try {
     const result = await pairgateRequest("/transaction/status", "GET", { reference_code: referenceCode });
-    const status = isTestModePayload(result) ? "pending" : statusOf(result);
+    const status = (TEST_MODE || isTestModePayload(result)) ? "pending" : statusOf(result);
     await updateFinalStatus(admin, order, transaction, status, result);
     return { status, result, message: status === "pending" ? "Pairgate transaction is still processing. It was not resubmitted." : "Pairgate transaction status checked: " + status + "." };
   } catch (error) {
@@ -420,7 +423,7 @@ export async function fulfillOrder(orderId: string) {
 
   const nested = result?.data ?? result;
   const providerReference = clean(first(nested, "reference_code", "transaction_id", "transaction_reference", "reference"));
-  const testMode = isTestModePayload(result);
+  const testMode = TEST_MODE || isTestModePayload(result);
   const status = testMode ? "pending" : statusOf(result);
   const transaction = {
     request_id: rid,
