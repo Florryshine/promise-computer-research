@@ -3,9 +3,12 @@ import { createAdminClient } from "@/lib/supabase/admin";
 
 const BASE_URL = (process.env.PAIRGATE_BASE_URL || "https://pairgate.com/api/v1").replace(/\/+$/, "");
 const API_KEY = (process.env.PAIRGATE_API_KEY || "").trim();
-const TEST_MODE = (process.env.PAIRGATE_TEST_MODE || "false").toLowerCase() === "true";
+const TEST_MODE = (process.env.PAIRGATE_TEST_MODE || "true").toLowerCase() === "true";
 
 function clean(value: unknown) { return String(value ?? "").trim(); }
+function isTestModePayload(payload: any): boolean {
+  return payload?.test_mode === true || payload?.data?.test_mode === true || payload?.data?.data?.test_mode === true;
+}
 function first(object: any, ...keys: string[]) {
   for (const key of keys) if (object?.[key] !== undefined && object?.[key] !== null && clean(object[key])) return object[key];
   return "";
@@ -18,7 +21,16 @@ export function pairgateConfigured() {
 export async function pairgateRequest(path: string, method: "GET" | "POST" = "GET", params?: Record<string, unknown>, useTestMode = TEST_MODE) {
   if (!API_KEY) throw new Error("Pairgate API key is missing. Set PAIRGATE_API_KEY in Vercel.");
   const cleanPath = path.replace(/^\/+/, "");
-  const testPath = useTestMode && !cleanPath.startsWith("test/") ? "test/" + cleanPath : cleanPath;
+  // Only endpoints documented by Pairgate as testable should be prefixed.
+  // Catalogues and wallet/provider discovery endpoints remain on their normal paths.
+  const testableEndpoints = new Set([
+    "airtime/purchase", "data/purchase", "cable/purchase", "electricity/purchase",
+    "education/purchase", "epin/purchase", "transaction/status",
+    "electricity/verify", "cable/verify"
+  ]);
+  const testPath = useTestMode && testableEndpoints.has(cleanPath) && !cleanPath.startsWith("test/")
+    ? "test/" + cleanPath
+    : cleanPath;
   const url = new URL(testPath, BASE_URL + "/");
   const options: RequestInit = {
     method,
@@ -193,6 +205,15 @@ function normalize(order: any): PairgateProduct | null {
   return null;
 }
 
+function hasRequiredDeliveryPayload(slug: string, payload: any): boolean {
+  const data = payload?.data ?? payload;
+  const scalar = first(data, "pin", "token", "electricity_token", "meter_token", "token_number", "voucher_code");
+  const pins = Array.isArray(data?.pins) ? data.pins : [];
+  if (slug === "electricity-bill") return Boolean(clean(first(data, "token", "electricity_token", "meter_token", "token_number")));
+  if (slug === "exam-pins") return Boolean(clean(scalar)) || pins.some((pin: any) => Boolean(pin?.pin || pin?.voucher_code));
+  return true;
+}
+
 function statusOf(payload: any): string {
   const nested = payload?.data ?? payload;
   const value = nested?.status;
@@ -207,39 +228,90 @@ function statusOf(payload: any): string {
 async function updateFinalStatus(admin: any, order: any, transaction: any, status: string, response: any) {
   const providerData = response?.data ?? response;
   const providerMessage = clean(first(providerData, "message", "status")) || status;
-  await admin.from("provider_transactions").update({
+  const service = Array.isArray(order.services) ? order.services[0] : order.services;
+  const slug = String(service?.slug || "");
+  const rawDeliveredPin = clean(first(providerData, "pin", "token", "electricity_token", "meter_token", "token_number", "voucher_code"));
+  const deliveredPin = slug === "exam-pins" && rawDeliveredPin.includes("<=>")
+    ? rawDeliveredPin.split("<=>").map((part: string, index: number) => (index === 0 ? "PIN: " : "Serial: ") + part.trim()).filter((part: string) => !part.endsWith(": ")).join(" | ")
+    : rawDeliveredPin;
+  const pins = Array.isArray(providerData?.pins) ? providerData.pins : [];
+  const pinText = pins.map((item: any) => {
+    const raw = clean(first(item, "pin", "pin_code", "voucher_code", "token"));
+    const serial = clean(first(item, "serial", "serial_number"));
+    return raw.includes("<=>")
+      ? raw.split("<=>").map((part: string, index: number) => (index === 0 ? "PIN: " : "Serial: ") + part.trim()).filter((part: string) => !part.endsWith(": ")).join(" | ")
+      : [raw ? "PIN: " + raw : "", serial ? "Serial: " + serial : "", item.denomination ? "Denomination: ₦" + item.denomination : ""].filter(Boolean).join(" | ");
+  }).filter(Boolean).join("\n");
+  const tokenRequired = slug === "electricity-bill";
+  const pinRequired = slug === "exam-pins";
+  const expectedPinCount = Math.max(1, Number(order.form_data?.quantity || 1));
+  const scalarPin = clean(first(providerData, "pin", "voucher_code", "token"));
+  const deliveredPinCount = pins.filter((item: any) => Boolean(first(item, "pin", "pin_code", "voucher_code", "token") || first(item, "serial", "serial_number"))).length || (scalarPin ? 1 : 0);
+  const hasDeliveryData = tokenRequired
+    ? Boolean(clean(first(providerData, "token", "electricity_token", "meter_token", "token_number", "voucher_code")))
+    : pinRequired
+    ? deliveredPinCount >= expectedPinCount
+    : Boolean(deliveredPin || pinText);
+  // A provider's generic "successful" status is not proof that the customer
+  // received the electricity token or exam PIN. Keep it re-checkable until
+  // the actual deliverable is present.
+  const deliveryPending = status === "successful" && ((tokenRequired || pinRequired) && !hasDeliveryData);
+  const persistedStatus = status === "successful" && deliveryPending ? "pending" : status;
+
+  const { error: txUpdateError } = await admin.from("provider_transactions").update({
     provider_reference: first(providerData, "reference_code", "transaction_id", "transaction_reference", "reference") || transaction.provider_reference || null,
-    provider_status: providerMessage,
-    status: status === "successful" ? "successful" : status === "failed" ? "failed" : "pending",
+    provider_status: deliveryPending ? "Provider reports success; waiting for token/PIN delivery" : providerMessage,
+    status: persistedStatus === "successful" ? "successful" : persistedStatus === "failed" ? "failed" : "pending",
     response,
   }).eq("request_id", transaction.request_id);
+  if (txUpdateError) throw txUpdateError;
 
   if (status === "successful") {
-    const pins = Array.isArray(providerData?.pins) ? providerData.pins : [];
-    const pinText = pins.map((item:any) => [item.pin ? "PIN: " + item.pin : "", item.serial ? "Serial: " + item.serial : "", item.denomination ? "Denomination: ₦" + item.denomination : ""].filter(Boolean).join(" | ")).join("\n");
-    const deliveredPin = clean(first(providerData, "pin", "token", "electricity_token"));
+    const baseFormData = { ...(order.form_data || {}) };
+    if (baseFormData.pairgate_test_mode === true) {
+      delete baseFormData.delivery_pin;
+      delete baseFormData.delivery_pins;
+      delete baseFormData.delivery_completed_at;
+    }
     const updatedForm = {
-      ...(order.form_data || {}),
+      ...baseFormData,
+      pairgate_test_mode: false,
       ...(deliveredPin ? { delivery_pin: deliveredPin } : {}),
       ...(pinText ? { delivery_pins: pinText } : {}),
       ...(clean(first(providerData, "batch_id")) ? { delivery_batch_id: clean(first(providerData, "batch_id")) } : {}),
-      delivery_status_message: providerMessage,
-      delivery_completed_at: clean(first(providerData, "completed_at")) || new Date().toISOString(),
+      delivery_status_message: deliveryPending ? "Pairgate reports success but has not returned the token/PIN yet. Please refresh later or contact support." : providerMessage,
+      delivery_completed_at: hasDeliveryData ? (clean(first(providerData, "completed_at")) || new Date().toISOString()) : (order.form_data?.delivery_completed_at || ""),
     };
-    await admin.from("orders").update({ status: "completed", admin_note: "Pairgate confirmed the service transaction as successful.", form_data: updatedForm }).eq("id", order.id);
-    const service = Array.isArray(order.services) ? order.services[0] : order.services;
-    await admin.from("notifications").insert({
-      user_id: order.customer_id,
-      title: "Order completed",
-      message: "Your " + (service?.title || "service") + " order " + order.reference + " was completed successfully.",
-    });
+    const completed = !deliveryPending;
+    const { error: orderUpdateError } = await admin.from("orders").update({
+      status: completed ? "completed" : "processing",
+      admin_note: completed
+        ? "Pairgate confirmed the service transaction and returned the delivery details."
+        : "Pairgate reports a successful transaction, but no electricity token/exam PIN was returned yet. The order remains processing until delivery details arrive.",
+      form_data: updatedForm,
+    }).eq("id", order.id);
+    if (orderUpdateError) throw orderUpdateError;
+
+    if (completed && order.customer_id) {
+      await admin.from("notifications").insert({
+        user_id: order.customer_id,
+        title: "Order completed",
+        message: "Your " + (service?.title || "service") + " order " + order.reference + " was completed successfully. Open order details to view the delivery information.",
+      });
+    }
   } else if (status === "failed") {
-    await admin.from("orders").update({ status: "needs_information", admin_note: "Pairgate reports that the transaction failed. Check Pairgate transaction history and wallet refund before taking further action." }).eq("id", order.id);
-    await admin.from("notifications").insert({
-      user_id: order.customer_id,
-      title: "Order needs attention",
-      message: "Your order " + order.reference + " needs a service-status check. We are reviewing the provider result.",
-    });
+    const { error: orderUpdateError } = await admin.from("orders").update({
+      status: "needs_information",
+      admin_note: "Pairgate reports that the transaction failed. Check Pairgate transaction history and wallet refund before taking further action."
+    }).eq("id", order.id);
+    if (orderUpdateError) throw orderUpdateError;
+    if (order.customer_id) {
+      await admin.from("notifications").insert({
+        user_id: order.customer_id,
+        title: "Order needs attention",
+        message: "Your order " + order.reference + " needs a service-status check. We are reviewing the provider result.",
+      });
+    }
   }
 }
 
@@ -257,10 +329,35 @@ async function checkPendingTransaction(admin: any, order: any, transaction: any)
     return { status: "pending", message: "Pairgate was contacted but did not return a transaction reference. Check Pairgate history before any retry." };
   }
   try {
-    const result = await pairgateRequest("/transaction/status", "GET", { reference_code: referenceCode });
-    const status = result?.data?.test_mode === true ? "pending" : statusOf(result);
+    const transactionWasTestMode = Boolean(
+      transaction.response?.test_mode === true ||
+      transaction.response?.retryable_test_attempt === true ||
+      transaction.response?.data?.test_mode === true ||
+      transaction.response?.data?.data?.test_mode === true
+    );
+    const result = await pairgateRequest("/transaction/status", "GET", { reference_code: referenceCode }, transactionWasTestMode);
+    const status = (transactionWasTestMode || isTestModePayload(result)) ? "pending" : statusOf(result);
     await updateFinalStatus(admin, order, transaction, status, result);
-    return { status, result, message: status === "pending" ? "Pairgate transaction is still processing. It was not resubmitted." : "Pairgate transaction status checked: " + status + "." };
+    const service = Array.isArray(order.services) ? order.services[0] : order.services;
+    const slug = String(service?.slug || "");
+    const effectiveStatus = status === "successful" && !hasRequiredDeliveryPayload(slug, result) ? "pending" : status;
+    if (status === "pending") {
+      const service = Array.isArray(order.services) ? order.services[0] : order.services;
+      const slug = String(service?.slug || "");
+      const hasToken = Boolean(clean(order.form_data?.delivery_pin));
+      const pinsText = clean(order.form_data?.delivery_pins);
+      const expectedPins = Math.max(1, Number(order.form_data?.quantity || 1));
+      const deliveredPins = Math.max((pinsText.match(/PIN:\s*(?!pending\b)[^|\n]+/gi) || []).length, hasToken ? 1 : 0);
+      const deliveryStillMissing = slug === "electricity-bill" ? !hasToken : slug === "exam-pins" ? deliveredPins < expectedPins || /PIN pending/i.test(pinsText) : false;
+      if (deliveryStillMissing) {
+        const { error: orderUpdateError } = await admin.from("orders").update({
+          status: "processing",
+          admin_note: "The previous order status did not have proof of delivery. Pairgate has not yet confirmed the required token/PIN delivery; the order is being tracked and was not resubmitted.",
+        }).eq("id", order.id);
+        if (orderUpdateError) throw orderUpdateError;
+      }
+    }
+    return { status: effectiveStatus, result, message: effectiveStatus === "pending" ? "Pairgate has not yet supplied the required delivery details. The existing transaction was checked, not resubmitted." : "Pairgate transaction status checked: " + effectiveStatus + "." };
   } catch (error) {
     return { status: "pending", message: "Existing Pairgate transaction was not resubmitted. Status check failed: " + (error instanceof Error ? error.message : "unknown error") };
   }
@@ -273,11 +370,32 @@ export async function fulfillOrder(orderId: string) {
     .eq("id", orderId).maybeSingle();
   if (error) throw error;
   if (!order) throw new Error("Order not found");
-  if (["completed", "cancelled"].includes(String(order.status))) return { status: order.status, message: "This order is already finalized. No new provider purchase was submitted." };
+  if (String(order.status) === "cancelled") return { status: "cancelled", message: "This order is cancelled. No provider purchase was submitted." };
   if (order.payment_status !== "paid") return { status: "skipped", message: "Order is not paid." };
 
+  const service = Array.isArray(order.services) ? order.services[0] : order.services;
+  const slug = String(service?.slug || "");
+  const savedPin = clean(order.form_data?.delivery_pin);
+  const savedPinsText = clean(order.form_data?.delivery_pins);
+  const expectedPins = Math.max(1, Number(order.form_data?.quantity || 1));
+  const deliveredPinCount = Math.max((savedPinsText.match(/PIN:\s*(?!pending\b)[^|\n]+/gi) || []).length, savedPin ? 1 : 0);
+  const hasRequiredDelivery = slug === "electricity-bill"
+    ? Boolean(savedPin)
+    : slug === "exam-pins"
+    ? deliveredPinCount >= expectedPins && !/PIN pending/i.test(savedPinsText)
+    : true;
+  // Leave completed non-token services finalized. Electricity/exam orders are
+  // checked against their provider transaction so a legacy test-mode result
+  // cannot masquerade as a real token/PIN delivery.
+  if (String(order.status) === "completed" && !["electricity-bill", "exam-pins"].includes(slug)) {
+    return { status: "completed", message: "This order is already finalized. No new provider purchase was submitted." };
+  }
+
   const product = normalize(order);
-  if (!product) return markNeedsAttention(admin, order, "This service is not yet enabled in the Pairgate adapter. Airtime and mobile data are supported in this integration pass; other services need their exact Pairgate fields/catalogues before automation.");
+  if (!product) {
+    if (String(order.status) === "completed" && hasRequiredDelivery) return { status: "completed", message: "This order already has its required delivery details." };
+    return markNeedsAttention(admin, order, "This service is not yet enabled in the Pairgate adapter. Airtime and mobile data are supported in this integration pass; other services need their exact Pairgate fields/catalogues before automation.");
+  }
 
   const phoneKind = product.kind === "airtime" || product.kind === "data";
   const problem =
@@ -296,9 +414,29 @@ export async function fulfillOrder(orderId: string) {
   const { data: existing, error: existingError } = await admin.from("provider_transactions")
     .select("*").eq("order_id", order.id).eq("service_id", product.kind).order("created_at", { ascending: false }).limit(1).maybeSingle();
   if (existingError) throw existingError;
-  if (existing?.status === "successful") return { status: "successful", message: "Already fulfilled.", transaction: existing };
 
   const responseStatus = clean(existing?.response?.data?.status ?? existing?.response?.status).toLowerCase();
+  const testModeAttempt = Boolean(existing && (
+    existing.response?.test_mode === true ||
+    existing.response?.retryable_test_attempt === true ||
+    existing.response?.data?.test_mode === true ||
+    existing.response?.data?.data?.test_mode === true
+  ));
+  if (String(order.status) === "completed" && hasRequiredDelivery && !testModeAttempt) {
+    return { status: "completed", message: "This order already has its required delivery details." };
+  }
+  if (existing?.status === "successful" && hasRequiredDelivery && !testModeAttempt) {
+    return { status: "successful", message: "Already fulfilled with delivery details.", transaction: existing };
+  }
+  if (testModeAttempt && TEST_MODE) {
+    const { error: testModeOrderError } = await admin.from("orders").update({
+      status: "needs_information",
+      admin_note: "The saved Pairgate attempt used TEST MODE. Any token/PIN shown by that attempt is not trusted as live delivery. Set PAIRGATE_TEST_MODE=false in the deployed environment, verify live wallet funds, then deliberately retry this already-paid order.",
+      form_data: { ...(order.form_data || {}), pairgate_test_mode: true, delivery_status_message: "Test-mode attempt only — waiting for live fulfilment." }
+    }).eq("id", order.id);
+    if (testModeOrderError) throw testModeOrderError;
+    return { status: "test_mode", message: "This order's previous attempt used Pairgate TEST MODE. Set PAIRGATE_TEST_MODE=false in the deployed environment, verify Pairgate has sufficient live wallet funds, then retry this already-paid order. No live purchase has been confirmed." };
+  }
   const explicitProviderRejection = Boolean(existing && existing.status === "failed" && (
     existing?.response?.data?.status === false ||
     existing?.response?.status === false ||
@@ -307,7 +445,7 @@ export async function fulfillOrder(orderId: string) {
   ));
   // A confirmed provider rejection can be retried against the same paid order.
   // Unknown outcomes are status-checked, never blindly resubmitted, to reduce duplicate delivery.
-  const retryableProviderRejection = explicitProviderRejection;
+  const retryableProviderRejection = explicitProviderRejection || (testModeAttempt && !TEST_MODE);
 
   if (existing && existing.response && Object.keys(existing.response).length > 0 && !retryableProviderRejection) {
     return checkPendingTransaction(admin, order, existing);
@@ -322,7 +460,7 @@ export async function fulfillOrder(orderId: string) {
 
   // Preserve the original failed attempt and use a unique reference for the safe retry.
   const rid = retryableProviderRejection
-    ? baseRequestId + "-R-" + Date.now().toString(36).toUpperCase()
+    ? baseRequestId + (testModeAttempt ? "-LIVE-" : "-R-") + Date.now().toString(36).toUpperCase()
     : baseRequestId;
   if (retryableProviderRejection) {
     await admin.from("orders").update({
@@ -376,33 +514,60 @@ export async function fulfillOrder(orderId: string) {
 
   const nested = result?.data ?? result;
   const providerReference = clean(first(nested, "reference_code", "transaction_id", "transaction_reference", "reference"));
-  const status = statusOf(result);
+  const testMode = TEST_MODE || isTestModePayload(result);
+  const status = testMode ? "pending" : statusOf(result);
   const transaction = {
     request_id: rid,
     provider_reference: providerReference,
     service_id: product.kind,
     response: result,
   };
+  if (testMode) {
+    // Test endpoints must never make a paid customer order look delivered.
+    const { error: testTxError } = await admin.from("provider_transactions").update({
+      status: "pending",
+      provider_status: "TEST MODE — no live purchase was made",
+      response: { ...result, test_mode: true, retryable_test_attempt: true },
+      provider_reference: providerReference || null,
+    }).eq("request_id", rid);
+    if (testTxError) throw testTxError;
+    const { error: testOrderError } = await admin.from("orders").update({
+      status: "needs_information",
+      admin_note: "Pairgate TEST MODE was used. This response is not a live purchase and no delivery should be assumed. Confirm live mode and explicitly retry this paid order.",
+      form_data: { ...(order.form_data || {}), pairgate_test_mode: true, delivery_status_message: "Test-mode attempt only — awaiting a live provider purchase." },
+    }).eq("id", order.id);
+    if (testOrderError) throw testOrderError;
+    return { status: "test_mode", message: "Pairgate test mode was used. No live fulfilment is confirmed; a deliberate live retry is required.", result };
+  }
   if (product.kind === "exam") {
     const details = Array.isArray(nested?.details) ? nested.details : [];
-    const children = details.map((item: any) => clean(item.reference)).filter(Boolean);
+    const children = details.map((item: any) => clean(item.reference ?? item.reference_code ?? item.transaction_reference)).filter(Boolean);
     for (const childReference of children) {
-      await admin.from("provider_transactions").upsert({
+      const { error: childInsertError } = await admin.from("provider_transactions").upsert({
         order_id: order.id, provider: "pairgate", request_id: childReference,
         provider_reference: childReference, service_id: "exam-pin", amount: Number(nested?.unit_price || product.amount / product.quantity),
         status: "pending", provider_status: "pending", request_data: { provider: product.provider, parent_reference: rid },
         response: { parent_reference: rid }
       }, { onConflict: "request_id" });
+      if (childInsertError) throw new Error("Pairgate returned exam PIN references but saving child transaction " + childReference + " failed: " + childInsertError.message);
+    }
+    if (children.length > 0 && children.length < product.quantity) {
+      const { error: partialExamError } = await admin.from("orders").update({
+        status: "processing",
+        admin_note: "Pairgate returned only " + children.length + " of " + product.quantity + " expected exam PIN transaction references. Do not resubmit; reconcile Pairgate history first.",
+      }).eq("id", order.id);
+      if (partialExamError) throw partialExamError;
     }
   }
   await updateFinalStatus(admin, order, transaction, status, result);
+  const effectiveStatus = status === "successful" && !hasRequiredDeliveryPayload(slug, result) ? "pending" : status;
   if (status === "pending") {
     await admin.from("orders").update({
       status: "processing",
       admin_note: "Pairgate accepted the purchase request. Waiting for final provider status; do not resubmit while it is pending.",
     }).eq("id", order.id);
   }
-  return { status, result };
+  return { status: effectiveStatus, result };
 }
 
 export async function pairgateHealth() {
