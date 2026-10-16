@@ -146,7 +146,13 @@ export async function POST(request: Request) {
       token_or_pin: hasDeliveredValue ? String(deliveredValue) : normalizedEventPins.join("\n"),
       completed_at: String(event.completed_at || new Date().toISOString())
     };
-    const waitingForDelivery = success && needsDeliveryValue && !hasDeliveredValue && !hasPinArray;
+    const waitingForDelivery = success && (
+      service?.slug === "electricity-bill"
+        ? !hasDeliveredValue
+        : service?.slug === "exam-pins"
+        ? !hasDeliveredValue && !hasPinArray
+        : false
+    );
     let orderStatus = success ? (waitingForDelivery ? "processing" : "completed") : "needs_information";
     let formData: Record<string, any> = {
       ...(order.form_data || {}),
