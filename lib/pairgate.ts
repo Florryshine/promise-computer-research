@@ -324,7 +324,7 @@ async function checkPendingTransaction(admin: any, order: any, transaction: any)
       transaction.response?.data?.data?.test_mode === true
     );
     const result = await pairgateRequest("/transaction/status", "GET", { reference_code: referenceCode }, transactionWasTestMode);
-    const status = (TEST_MODE || isTestModePayload(result)) ? "pending" : statusOf(result);
+    const status = (transactionWasTestMode || isTestModePayload(result)) ? "pending" : statusOf(result);
     await updateFinalStatus(admin, order, transaction, status, result);
     const service = Array.isArray(order.services) ? order.services[0] : order.services;
     const slug = String(service?.slug || "");
