@@ -372,14 +372,18 @@ export async function fulfillOrder(orderId: string) {
     : slug === "exam-pins"
     ? deliveredPinCount >= expectedPins && !/PIN pending/i.test(savedPinsText)
     : true;
-  // Repair legacy orders that were incorrectly marked completed without the
-  // actual electricity token or all requested exam PINs.
-  if (String(order.status) === "completed" && hasRequiredDelivery) {
-    return { status: "completed", message: "This order already has its required delivery details." };
+  // Leave completed non-token services finalized. Electricity/exam orders are
+  // checked against their provider transaction so a legacy test-mode result
+  // cannot masquerade as a real token/PIN delivery.
+  if (String(order.status) === "completed" && !["electricity-bill", "exam-pins"].includes(slug)) {
+    return { status: "completed", message: "This order is already finalized. No new provider purchase was submitted." };
   }
 
   const product = normalize(order);
-  if (!product) return markNeedsAttention(admin, order, "This service is not yet enabled in the Pairgate adapter. Airtime and mobile data are supported in this integration pass; other services need their exact Pairgate fields/catalogues before automation.");
+  if (!product) {
+    if (String(order.status) === "completed" && hasRequiredDelivery) return { status: "completed", message: "This order already has its required delivery details." };
+    return markNeedsAttention(admin, order, "This service is not yet enabled in the Pairgate adapter. Airtime and mobile data are supported in this integration pass; other services need their exact Pairgate fields/catalogues before automation.");
+  }
 
   const phoneKind = product.kind === "airtime" || product.kind === "data";
   const problem =
@@ -398,7 +402,6 @@ export async function fulfillOrder(orderId: string) {
   const { data: existing, error: existingError } = await admin.from("provider_transactions")
     .select("*").eq("order_id", order.id).eq("service_id", product.kind).order("created_at", { ascending: false }).limit(1).maybeSingle();
   if (existingError) throw existingError;
-  if (existing?.status === "successful" && hasRequiredDelivery) return { status: "successful", message: "Already fulfilled with delivery details.", transaction: existing };
 
   const responseStatus = clean(existing?.response?.data?.status ?? existing?.response?.status).toLowerCase();
   const testModeAttempt = Boolean(existing && (
@@ -407,6 +410,12 @@ export async function fulfillOrder(orderId: string) {
     existing.response?.data?.test_mode === true ||
     existing.response?.data?.data?.test_mode === true
   ));
+  if (String(order.status) === "completed" && hasRequiredDelivery && !testModeAttempt) {
+    return { status: "completed", message: "This order already has its required delivery details." };
+  }
+  if (existing?.status === "successful" && hasRequiredDelivery && !testModeAttempt) {
+    return { status: "successful", message: "Already fulfilled with delivery details.", transaction: existing };
+  }
   if (testModeAttempt && TEST_MODE) {
     return { status: "test_mode", message: "This order's previous attempt used Pairgate TEST MODE. Set PAIRGATE_TEST_MODE=false in the deployed environment, verify Pairgate has sufficient live wallet funds, then retry this already-paid order. No live purchase has been confirmed." };
   }
