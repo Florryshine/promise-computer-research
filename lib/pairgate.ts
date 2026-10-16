@@ -207,39 +207,71 @@ function statusOf(payload: any): string {
 async function updateFinalStatus(admin: any, order: any, transaction: any, status: string, response: any) {
   const providerData = response?.data ?? response;
   const providerMessage = clean(first(providerData, "message", "status")) || status;
-  await admin.from("provider_transactions").update({
+  const service = Array.isArray(order.services) ? order.services[0] : order.services;
+  const slug = String(service?.slug || "");
+  const deliveredPin = clean(first(providerData, "pin", "token", "electricity_token", "meter_token", "token_number", "voucher_code"));
+  const pins = Array.isArray(providerData?.pins) ? providerData.pins : [];
+  const pinText = pins.map((item: any) => [
+    item.pin ? "PIN: " + item.pin : "",
+    item.serial ? "Serial: " + item.serial : "",
+    item.denomination ? "Denomination: ₦" + item.denomination : ""
+  ].filter(Boolean).join(" | ")).join("\n");
+  const hasDeliveryData = Boolean(deliveredPin || pinText);
+  const tokenRequired = slug === "electricity-bill";
+  const pinRequired = slug === "exam-pins";
+  // A provider's generic "successful" status is not proof that the customer
+  // received the electricity token or exam PIN. Keep it re-checkable until
+  // the actual deliverable is present.
+  const deliveryPending = status === "successful" && ((tokenRequired || pinRequired) && !hasDeliveryData);
+  const persistedStatus = status === "successful" && deliveryPending ? "pending" : status;
+
+  const { error: txUpdateError } = await admin.from("provider_transactions").update({
     provider_reference: first(providerData, "reference_code", "transaction_id", "transaction_reference", "reference") || transaction.provider_reference || null,
-    provider_status: providerMessage,
-    status: status === "successful" ? "successful" : status === "failed" ? "failed" : "pending",
+    provider_status: deliveryPending ? "Provider reports success; waiting for token/PIN delivery" : providerMessage,
+    status: persistedStatus === "successful" ? "successful" : persistedStatus === "failed" ? "failed" : "pending",
     response,
   }).eq("request_id", transaction.request_id);
+  if (txUpdateError) throw txUpdateError;
 
   if (status === "successful") {
-    const pins = Array.isArray(providerData?.pins) ? providerData.pins : [];
-    const pinText = pins.map((item:any) => [item.pin ? "PIN: " + item.pin : "", item.serial ? "Serial: " + item.serial : "", item.denomination ? "Denomination: ₦" + item.denomination : ""].filter(Boolean).join(" | ")).join("\n");
-    const deliveredPin = clean(first(providerData, "pin", "token", "electricity_token"));
     const updatedForm = {
       ...(order.form_data || {}),
       ...(deliveredPin ? { delivery_pin: deliveredPin } : {}),
       ...(pinText ? { delivery_pins: pinText } : {}),
       ...(clean(first(providerData, "batch_id")) ? { delivery_batch_id: clean(first(providerData, "batch_id")) } : {}),
-      delivery_status_message: providerMessage,
-      delivery_completed_at: clean(first(providerData, "completed_at")) || new Date().toISOString(),
+      delivery_status_message: deliveryPending ? "Pairgate reports success but has not returned the token/PIN yet. Please refresh later or contact support." : providerMessage,
+      delivery_completed_at: hasDeliveryData ? (clean(first(providerData, "completed_at")) || new Date().toISOString()) : (order.form_data?.delivery_completed_at || ""),
     };
-    await admin.from("orders").update({ status: "completed", admin_note: "Pairgate confirmed the service transaction as successful.", form_data: updatedForm }).eq("id", order.id);
-    const service = Array.isArray(order.services) ? order.services[0] : order.services;
-    await admin.from("notifications").insert({
-      user_id: order.customer_id,
-      title: "Order completed",
-      message: "Your " + (service?.title || "service") + " order " + order.reference + " was completed successfully.",
-    });
+    const completed = !deliveryPending;
+    const { error: orderUpdateError } = await admin.from("orders").update({
+      status: completed ? "completed" : "processing",
+      admin_note: completed
+        ? "Pairgate confirmed the service transaction and returned the delivery details."
+        : "Pairgate reports a successful transaction, but no electricity token/exam PIN was returned yet. The order remains processing until delivery details arrive.",
+      form_data: updatedForm,
+    }).eq("id", order.id);
+    if (orderUpdateError) throw orderUpdateError;
+
+    if (completed && order.customer_id) {
+      await admin.from("notifications").insert({
+        user_id: order.customer_id,
+        title: "Order completed",
+        message: "Your " + (service?.title || "service") + " order " + order.reference + " was completed successfully. Open order details to view the delivery information.",
+      });
+    }
   } else if (status === "failed") {
-    await admin.from("orders").update({ status: "needs_information", admin_note: "Pairgate reports that the transaction failed. Check Pairgate transaction history and wallet refund before taking further action." }).eq("id", order.id);
-    await admin.from("notifications").insert({
-      user_id: order.customer_id,
-      title: "Order needs attention",
-      message: "Your order " + order.reference + " needs a service-status check. We are reviewing the provider result.",
-    });
+    const { error: orderUpdateError } = await admin.from("orders").update({
+      status: "needs_information",
+      admin_note: "Pairgate reports that the transaction failed. Check Pairgate transaction history and wallet refund before taking further action."
+    }).eq("id", order.id);
+    if (orderUpdateError) throw orderUpdateError;
+    if (order.customer_id) {
+      await admin.from("notifications").insert({
+        user_id: order.customer_id,
+        title: "Order needs attention",
+        message: "Your order " + order.reference + " needs a service-status check. We are reviewing the provider result.",
+      });
+    }
   }
 }
 
