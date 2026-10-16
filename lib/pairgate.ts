@@ -3,7 +3,7 @@ import { createAdminClient } from "@/lib/supabase/admin";
 
 const BASE_URL = (process.env.PAIRGATE_BASE_URL || "https://pairgate.com/api/v1").replace(/\/+$/, "");
 const API_KEY = (process.env.PAIRGATE_API_KEY || "").trim();
-const TEST_MODE = (process.env.PAIRGATE_TEST_MODE || "false").toLowerCase() === "true";
+const TEST_MODE = (process.env.PAIRGATE_TEST_MODE || "true").toLowerCase() === "true";
 
 function clean(value: unknown) { return String(value ?? "").trim(); }
 function first(object: any, ...keys: string[]) {
