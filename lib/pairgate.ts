@@ -196,6 +196,15 @@ function normalize(order: any): PairgateProduct | null {
   return null;
 }
 
+function hasRequiredDeliveryPayload(slug: string, payload: any): boolean {
+  const data = payload?.data ?? payload;
+  const scalar = first(data, "pin", "token", "electricity_token", "meter_token", "token_number", "voucher_code");
+  const pins = Array.isArray(data?.pins) ? data.pins : [];
+  if (slug === "electricity-bill") return Boolean(clean(first(data, "token", "electricity_token", "meter_token", "token_number")));
+  if (slug === "exam-pins") return Boolean(clean(scalar)) || pins.some((pin: any) => Boolean(pin?.pin || pin?.voucher_code));
+  return true;
+}
+
 function statusOf(payload: any): string {
   const nested = payload?.data ?? payload;
   const value = nested?.status;
@@ -298,6 +307,9 @@ async function checkPendingTransaction(admin: any, order: any, transaction: any)
     const result = await pairgateRequest("/transaction/status", "GET", { reference_code: referenceCode });
     const status = (TEST_MODE || isTestModePayload(result)) ? "pending" : statusOf(result);
     await updateFinalStatus(admin, order, transaction, status, result);
+    const service = Array.isArray(order.services) ? order.services[0] : order.services;
+    const slug = String(service?.slug || "");
+    const effectiveStatus = status === "successful" && !hasRequiredDeliveryPayload(slug, result) ? "pending" : status;
     if (status === "pending") {
       const service = Array.isArray(order.services) ? order.services[0] : order.services;
       const slug = String(service?.slug || "");
@@ -314,7 +326,7 @@ async function checkPendingTransaction(admin: any, order: any, transaction: any)
         if (orderUpdateError) throw orderUpdateError;
       }
     }
-    return { status, result, message: status === "pending" ? "Pairgate transaction is still processing. It was not resubmitted." : "Pairgate transaction status checked: " + status + "." };
+    return { status: effectiveStatus, result, message: effectiveStatus === "pending" ? "Pairgate has not yet supplied the required delivery details. The existing transaction was checked, not resubmitted." : "Pairgate transaction status checked: " + effectiveStatus + "." };
   } catch (error) {
     return { status: "pending", message: "Existing Pairgate transaction was not resubmitted. Status check failed: " + (error instanceof Error ? error.message : "unknown error") };
   }
@@ -502,13 +514,14 @@ export async function fulfillOrder(orderId: string) {
     }
   }
   await updateFinalStatus(admin, order, transaction, status, result);
+  const effectiveStatus = status === "successful" && !hasRequiredDeliveryPayload(slug, result) ? "pending" : status;
   if (status === "pending") {
     await admin.from("orders").update({
       status: "processing",
       admin_note: "Pairgate accepted the purchase request. Waiting for final provider status; do not resubmit while it is pending.",
     }).eq("id", order.id);
   }
-  return { status, result };
+  return { status: effectiveStatus, result };
 }
 
 export async function pairgateHealth() {
