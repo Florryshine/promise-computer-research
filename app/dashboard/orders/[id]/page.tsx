@@ -44,6 +44,16 @@ export default async function OrderDetail({params}:{params:Promise<{id:string}>}
     };
   }));
 
+  const service = Array.isArray(order.services) ? order.services[0] : order.services;
+  const expectedPins = Math.max(1, Number(order.form_data?.quantity || 1));
+  const savedPinsText = typeof order.form_data?.delivery_pins === 'string' ? order.form_data.delivery_pins : '';
+  const deliveredPinCount = (savedPinsText.match(/PIN:\s*(?!pending\b)[^|\n]+/gi) || []).length;
+  const missingRequiredDelivery = service?.slug === 'electricity-bill'
+    ? !(typeof order.form_data?.delivery_pin === 'string' && order.form_data.delivery_pin.trim())
+    : service?.slug === 'exam-pins'
+    ? deliveredPinCount < expectedPins || /PIN pending/i.test(savedPinsText)
+    : false;
+
   return <div>
     <div className="mb-5"><Link href="/dashboard/orders" className="text-sm font-bold text-[#0757d5]">← Back to my orders</Link></div>
     <section className="rounded-3xl bg-white p-5 shadow-sm sm:p-7">
