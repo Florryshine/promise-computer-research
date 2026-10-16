@@ -24,7 +24,7 @@ export async function GET(request:Request){
   }
   if(kind==="electricity"||kind==="education"){
    const payload=await pairgateRequest("/providers/"+kind);
-   const providers=rows(payload).map((p:any)=>({id:clean(p.slug??p.id),name:clean(p.name)})).filter((p:any)=>p.id&&p.name);
+   const providers=rows(payload).map((p:any)=>{const rawId=clean(p.slug??p.id);const name=clean(p.name);if(kind==="education"){const identity=(rawId+" "+name).toLowerCase();const canonical=identity.includes("waec")?"waec":identity.includes("neco")?"neco":identity.includes("nabteb")||identity.includes("nabt")?"nabt":rawId;return {id:canonical,name};}return {id:rawId,name};}).filter((p:any)=>p.id&&p.name);
    return NextResponse.json({providers},{headers:{"Cache-Control":"no-store"}});
   }
   if(kind==="epin"){
