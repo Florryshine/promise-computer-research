@@ -57,7 +57,7 @@ export async function POST(request: Request) {
     const success = ["successful", "success", "completed"].includes(status);
     const rawDeliveredValue = event.pin ?? event.token ?? event.electricity_token ?? event.meter_token ?? event.token_number ?? event.voucher_code;
     const deliveredValue = typeof rawDeliveredValue === "string" && rawDeliveredValue.includes("<=>")
-      ? rawDeliveredValue.split("<=>").map((part: string) => part.trim()).filter(Boolean).join(" | ")
+      ? rawDeliveredValue.split("<=>").map((part: string, index: number) => (index === 0 ? "PIN: " : "Serial: ") + part.trim()).filter((part: string) => !part.endsWith(": ")).join(" | ")
       : rawDeliveredValue;
     const eventPins = Array.isArray(event.pins) ? event.pins : [];
     const hasDeliveredValue = deliveredValue !== undefined && deliveredValue !== null && String(deliveredValue).trim() !== "";
