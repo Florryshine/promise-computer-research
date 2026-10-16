@@ -6,7 +6,7 @@ import {getPairgateDataPlans,pairgateRequest} from "@/lib/pairgate";
 const VTU_SLUGS=new Set(["airtime-recharge","data-subscription","dstv-subscription","gotv-subscription","startimes-subscription","electricity-bill","exam-pins","data-pins"]);
 const clean=(v:unknown)=>String(v??"").trim();
 const serviceFee=(amount:number,rate:number)=>Math.ceil(amount*rate/100);
-const EXAM_PIN_PRICES:Record<string,number>={waec:6500,neco:3000,nabt:1200};
+const EXAM_PIN_PRICES:Record<string,number>={waec:5800,neco:2200,nabt:1500};
 const JAMB_SERVICE_PRICES:Record<string,number>={"jamb-admission-letter-portal":3000,"jamb-admission-letter-no-portal":4000,"jamb-original-result-portal":2500,"jamb-original-result-no-portal":3500,"jamb-original-result-printing":2500,"jamb-admission-letter-printing":3000,"jamb-admission-status-checking":1000,"jamb-reprinting":1000,"jamb-olevel-screenshot":1000,"jamb-email-phone-screenshot":1000,"jamb-profile-code-retrieval":1000,"jamb-registration-number-retrieval":1000,"jamb-indemnity-form":1000};
 function rows(payload:any):any[]{
  const data=payload?.data??payload;
