@@ -24,7 +24,10 @@ export async function POST(request: Request) {
       return new NextResponse("Invalid signature", { status: 401 });
     }
 
-    const event = JSON.parse(raw);
+    const parsedEvent = JSON.parse(raw);
+    const event = parsedEvent?.data && typeof parsedEvent.data === "object" && !Array.isArray(parsedEvent.data)
+      ? { ...parsedEvent.data, ...parsedEvent }
+      : parsedEvent;
     const referenceCode = String(event.reference_code || event.client_reference || event.reference || event.transaction_reference || "").trim();
     const status = String(event.status || event.data?.status || "").toLowerCase();
     if (!referenceCode || !["successful", "success", "completed", "failed", "failure"].includes(status)) {
@@ -104,7 +107,7 @@ export async function POST(request: Request) {
           ? childRaw.split("<=>").map((part: string, index: number) => (index === 0 ? "PIN: " : "Serial: ") + part.trim()).filter((part: string) => !part.endsWith(": ")).join(" | ")
           : childRaw || (Array.isArray(childEvent.pins) ? childEvent.pins.map((pin: any) => [pin.pin ? "PIN: " + pin.pin : "", pin.serial ? "Serial: " + pin.serial : ""].filter(Boolean).join(" | ")).filter(Boolean).join("; ") : "");
         return "Reference: " + String(child.provider_reference || child.request_id) + " | " +
-          (childValue ? "PIN: " + String(childValue) : child.status === "successful" ? "PIN delivered (value not parsed)" : "PIN pending") +
+          (childValue ? String(childValue).startsWith("PIN: ") ? String(childValue) : "PIN: " + String(childValue) : child.status === "successful" ? "PIN delivered (value not parsed)" : "PIN pending") +
           " | " + String(childEvent.item || event.item || "") + " | " + String(child.status || "pending");
       });
       const childTransactions = childRows || [];
@@ -125,11 +128,14 @@ export async function POST(request: Request) {
     if (updateOrderError) throw updateOrderError;
 
     if (order.customer_id) {
+      const actuallyCompleted = orderStatus === "completed";
       await admin.from("notifications").insert({
         user_id: order.customer_id,
-        title: success ? "Order completed" : "Order needs attention",
-        message: success
+        title: actuallyCompleted ? "Order completed" : orderStatus === "needs_information" ? "Order needs attention" : "Order update",
+        message: actuallyCompleted
           ? "Pairgate completed order " + order.reference + ". Open your order details to view delivery information."
+          : success
+          ? "Pairgate reported success for order " + order.reference + ", but delivery is not yet fully confirmed. The order remains under processing."
           : "Pairgate reported a failed transaction for order " + order.reference + ". Contact support if the provider wallet has not been refunded."
       });
     }
