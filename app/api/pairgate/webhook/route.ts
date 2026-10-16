@@ -54,6 +54,33 @@ export async function POST(request: Request) {
       return NextResponse.json({ received: true, matched: false });
     }
 
+    const testModeAttempt = Boolean(
+      tx.response?.test_mode === true ||
+      tx.response?.retryable_test_attempt === true ||
+      tx.response?.data?.test_mode === true ||
+      tx.response?.data?.data?.test_mode === true
+    );
+    if (testModeAttempt) {
+      const { error: testTxError } = await admin.from("provider_transactions").update({
+        status: "pending",
+        provider_status: "TEST MODE webhook ignored; no live purchase confirmed",
+        response: { ...(tx.response || {}), webhook: event, test_mode: true, retryable_test_attempt: true }
+      }).eq("request_id", tx.request_id);
+      if (testTxError) throw testTxError;
+      const { data: testOrder, error: testOrderLoadError } = await admin.from("orders")
+        .select("id,form_data").eq("id", tx.order_id).maybeSingle();
+      if (testOrderLoadError) throw testOrderLoadError;
+      if (testOrder) {
+        const { error: testOrderUpdateError } = await admin.from("orders").update({
+          status: "needs_information",
+          admin_note: "A Pairgate TEST MODE webhook was received. It is not proof of live fulfilment; no token/PIN from this event was accepted. Switch to live mode and deliberately retry this already-paid order.",
+          form_data: { ...(testOrder.form_data || {}), pairgate_test_mode: true, delivery_status_message: "Test-mode webhook ignored — awaiting a live provider purchase." }
+        }).eq("id", testOrder.id);
+        if (testOrderUpdateError) throw testOrderUpdateError;
+      }
+      return NextResponse.json({ received: true, test_mode: true });
+    }
+
     const success = ["successful", "success", "completed"].includes(status);
     const rawDeliveredValue = event.pin ?? event.token ?? event.electricity_token ?? event.meter_token ?? event.token_number ?? event.voucher_code;
     const deliveredValue = typeof rawDeliveredValue === "string" && rawDeliveredValue.includes("<=>")
