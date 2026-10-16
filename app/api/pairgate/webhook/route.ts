@@ -87,8 +87,17 @@ export async function POST(request: Request) {
       ? rawDeliveredValue.split("<=>").map((part: string, index: number) => (index === 0 ? "PIN: " : "Serial: ") + part.trim()).filter((part: string) => !part.endsWith(": ")).join(" | ")
       : rawDeliveredValue;
     const eventPins = Array.isArray(event.pins) ? event.pins : [];
+    const normalizePin = (pin: any) => {
+      const raw = pin?.pin ?? pin?.pin_code ?? pin?.voucher_code ?? pin?.token ?? "";
+      const serial = pin?.serial ?? pin?.serial_number ?? "";
+      if (typeof raw === "string" && raw.includes("<=>")) {
+        return raw.split("<=>").map((part: string, index: number) => (index === 0 ? "PIN: " : "Serial: ") + part.trim()).filter((part: string) => !part.endsWith(": ")).join(" | ");
+      }
+      return [raw ? "PIN: " + String(raw) : "", serial ? "Serial: " + String(serial) : ""].filter(Boolean).join(" | ");
+    };
     const hasDeliveredValue = deliveredValue !== undefined && deliveredValue !== null && String(deliveredValue).trim() !== "";
-    const hasPinArray = eventPins.some((pin: any) => Boolean(pin && (pin.pin || pin.voucher_code)));
+    const normalizedEventPins = eventPins.map(normalizePin).filter(Boolean);
+    const hasPinArray = normalizedEventPins.length > 0;
     const response = { ...(tx.response || {}), webhook: event };
     const { error: updateTxError } = await admin.from("provider_transactions").update({
       status: success ? ((tx.service_id === "electricity" || tx.service_id === "exam-pin" || tx.service_id === "exam") && !hasDeliveredValue && !hasPinArray ? "pending" : "successful") : "failed",
@@ -113,12 +122,18 @@ export async function POST(request: Request) {
       item: String(event.item || event.plan || ""),
       message: String(event.message || ""),
       recipient: String(event.recipient || ""),
-      token_or_pin: hasDeliveredValue ? String(deliveredValue) : eventPins.map((pin: any) => [pin.pin ? "PIN: " + pin.pin : "", pin.serial ? "Serial: " + pin.serial : ""].filter(Boolean).join(" | ")).filter(Boolean).join("\n"),
+      token_or_pin: hasDeliveredValue ? String(deliveredValue) : normalizedEventPins.join("\n"),
       completed_at: String(event.completed_at || new Date().toISOString())
     };
     const waitingForDelivery = success && needsDeliveryValue && !hasDeliveredValue && !hasPinArray;
     let orderStatus = success ? (waitingForDelivery ? "processing" : "completed") : "needs_information";
-    let formData: Record<string, any> = { ...(order.form_data || {}), pairgate_delivery: JSON.stringify(delivered), delivery_status_message: waitingForDelivery ? "Provider reports success but has not returned the token/PIN yet." : delivered.message, ...(hasDeliveredValue ? { delivery_pin: String(deliveredValue) } : {}) };
+    let formData: Record<string, any> = {
+      ...(order.form_data || {}),
+      pairgate_delivery: JSON.stringify(delivered),
+      delivery_status_message: waitingForDelivery ? "Provider reports success but has not returned the token/PIN yet." : delivered.message,
+      ...(hasDeliveredValue ? { delivery_pin: String(deliveredValue) } : {}),
+      ...(!hasDeliveredValue && normalizedEventPins.length ? { delivery_pins: normalizedEventPins.join("\n") } : {})
+    };
     if (!waitingForDelivery) formData.delivery_completed_at = delivered.completed_at;
     let orderMessage = success
       ? (waitingForDelivery ? "Pairgate reports success, but the token/PIN has not arrived yet. The order remains processing until delivery details are received." : "Pairgate confirmed delivery. Open the order details to view the delivery information.")
