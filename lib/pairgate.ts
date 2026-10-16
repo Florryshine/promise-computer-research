@@ -408,23 +408,49 @@ export async function fulfillOrder(orderId: string) {
 
   const nested = result?.data ?? result;
   const providerReference = clean(first(nested, "reference_code", "transaction_id", "transaction_reference", "reference"));
-  const status = statusOf(result);
+  const testMode = nested?.test_mode === true || result?.test_mode === true;
+  const status = testMode ? "pending" : statusOf(result);
   const transaction = {
     request_id: rid,
     provider_reference: providerReference,
     service_id: product.kind,
     response: result,
   };
+  if (testMode) {
+    // Test endpoints must never make a paid customer order look delivered.
+    const { error: testTxError } = await admin.from("provider_transactions").update({
+      status: "pending",
+      provider_status: "TEST MODE — no live purchase was made",
+      response: { ...result, test_mode: true, retryable_test_attempt: true },
+      provider_reference: providerReference || null,
+    }).eq("request_id", rid);
+    if (testTxError) throw testTxError;
+    const { error: testOrderError } = await admin.from("orders").update({
+      status: "needs_information",
+      admin_note: "Pairgate TEST MODE was used. This response is not a live purchase and no delivery should be assumed. Confirm live mode and explicitly retry this paid order.",
+      form_data: { ...(order.form_data || {}), pairgate_test_mode: true, delivery_status_message: "Test-mode attempt only — awaiting a live provider purchase." },
+    }).eq("id", order.id);
+    if (testOrderError) throw testOrderError;
+    return { status: "test_mode", message: "Pairgate test mode was used. No live fulfilment is confirmed; a deliberate live retry is required.", result };
+  }
   if (product.kind === "exam") {
     const details = Array.isArray(nested?.details) ? nested.details : [];
-    const children = details.map((item: any) => clean(item.reference)).filter(Boolean);
+    const children = details.map((item: any) => clean(item.reference ?? item.reference_code ?? item.transaction_reference)).filter(Boolean);
     for (const childReference of children) {
-      await admin.from("provider_transactions").upsert({
+      const { error: childInsertError } = await admin.from("provider_transactions").upsert({
         order_id: order.id, provider: "pairgate", request_id: childReference,
         provider_reference: childReference, service_id: "exam-pin", amount: Number(nested?.unit_price || product.amount / product.quantity),
         status: "pending", provider_status: "pending", request_data: { provider: product.provider, parent_reference: rid },
         response: { parent_reference: rid }
       }, { onConflict: "request_id" });
+      if (childInsertError) throw new Error("Pairgate returned exam PIN references but saving child transaction " + childReference + " failed: " + childInsertError.message);
+    }
+    if (children.length > 0 && children.length < product.quantity) {
+      const { error: partialExamError } = await admin.from("orders").update({
+        status: "processing",
+        admin_note: "Pairgate returned only " + children.length + " of " + product.quantity + " expected exam PIN transaction references. Do not resubmit; reconcile Pairgate history first.",
+      }).eq("id", order.id);
+      if (partialExamError) throw partialExamError;
     }
   }
   await updateFinalStatus(admin, order, transaction, status, result);
