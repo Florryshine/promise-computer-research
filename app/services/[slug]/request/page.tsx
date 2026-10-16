@@ -11,7 +11,7 @@ type EpinDenomination={value:number;label:string};
 
 const VTU_SLUGS=new Set(["airtime-recharge","data-subscription","dstv-subscription","gotv-subscription","startimes-subscription","electricity-bill","exam-pins","data-pins"]);
 const FEE_RATE:Record<string,number>={airtime:3,data:5,cable:5,electricity:5,exam:5,datapin:5};
-const EXAM_PIN_PRICES:Record<string,number>={waec:6500,neco:3000,nabt:1200};
+const EXAM_PIN_PRICES:Record<string,number>={waec:5800,neco:2200,nabt:1500};
 function canonicalExamProvider(value:unknown){
  const text=String(value??"").trim().toLowerCase();
  if(text.includes("waec"))return "waec";
