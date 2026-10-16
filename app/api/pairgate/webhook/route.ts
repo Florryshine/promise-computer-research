@@ -36,7 +36,7 @@ export async function POST(request: Request) {
 
     const admin = createAdminClient();
     let { data: tx, error: txError } = await admin.from("provider_transactions")
-      .select("request_id,order_id,status,response,service_id,provider_reference")
+      .select("request_id,order_id,status,response,service_id,provider_reference,request_data")
       .eq("provider_reference", referenceCode).maybeSingle();
     if (txError) throw txError;
     // Some Pairgate events send our client reference rather than their transaction reference.
@@ -118,6 +118,19 @@ export async function POST(request: Request) {
 
     const service = Array.isArray(order.services) ? order.services[0] : order.services;
     const needsDeliveryValue = service?.slug === "electricity-bill" || service?.slug === "exam-pins";
+    const savedPinsText = typeof order.form_data?.delivery_pins === "string" ? order.form_data.delivery_pins : "";
+    const expectedPinCount = Math.max(1, Number(order.form_data?.quantity || 1));
+    const savedPinCount = Math.max((savedPinsText.match(/PIN:\s*(?!pending\b)[^|\n]+/gi) || []).length, order.form_data?.delivery_pin ? 1 : 0);
+    const existingDeliveryComplete = service?.slug === "electricity-bill"
+      ? Boolean(order.form_data?.delivery_pin)
+      : service?.slug === "exam-pins"
+      ? savedPinCount >= expectedPinCount && !/PIN pending/i.test(savedPinsText)
+      : false;
+    // An old/duplicate webhook must not overwrite a newer live delivery.
+    if (order.status === "completed" && order.form_data?.pairgate_test_mode !== true && existingDeliveryComplete) {
+      return NextResponse.json({ received: true, stale_or_duplicate: true });
+    }
+    const parentReference = tx.service_id === "exam" ? tx.request_id : String(tx.request_data?.parent_reference || "");
     const baseFormData = { ...(order.form_data || {}) };
     if (baseFormData.pairgate_test_mode === true) {
       delete baseFormData.delivery_pin;
@@ -148,9 +161,10 @@ export async function POST(request: Request) {
       : "Pairgate reported a failed transaction. Check the provider transaction and refund before retrying.";
     if (tx.service_id === "exam-pin" || tx.service_id === "exam") {
       const { data: childRows, error: childRowsError } = await admin.from("provider_transactions")
-        .select("request_id,provider_reference,status,response,service_id").eq("order_id", order.id).eq("service_id", "exam-pin");
+        .select("request_id,provider_reference,status,response,service_id,request_data").eq("order_id", order.id).eq("service_id", "exam-pin");
       if (childRowsError) throw childRowsError;
-      const pins = (childRows || []).map((child: any) => {
+      const batchChildren = (childRows || []).filter((child: any) => !parentReference || child.request_data?.parent_reference === parentReference);
+      const pins = batchChildren.map((child: any) => {
         const childEvent = child.response?.webhook || child.response?.data || child.response || {};
         const childRaw = childEvent.pin ?? childEvent.token ?? childEvent.voucher_code;
         const childValue = typeof childRaw === "string" && childRaw.includes("<=>")
@@ -160,7 +174,7 @@ export async function POST(request: Request) {
           (childValue ? String(childValue).startsWith("PIN: ") ? String(childValue) : "PIN: " + String(childValue) : child.status === "successful" ? "PIN delivered (value not parsed)" : "PIN pending") +
           " | " + String(childEvent.item || event.item || "") + " | " + String(child.status || "pending");
       });
-      const childTransactions = childRows || [];
+      const childTransactions = batchChildren;
       const expectedPinCount = Math.max(1, Number(order.form_data?.quantity || 1));
       const allDone = childTransactions.length >= expectedPinCount && childTransactions.every((row: any) => {
         const childEvent = row.response?.webhook || row.response?.data || row.response || {};
@@ -171,7 +185,7 @@ export async function POST(request: Request) {
         const { error: parentUpdateError } = await admin.from("provider_transactions").update({
           status: "successful",
           provider_status: "All requested exam PIN child transactions delivered"
-        }).eq("order_id", order.id).eq("service_id", "exam");
+        }).eq("order_id", order.id).eq("service_id", "exam").eq("request_id", parentReference);
         if (parentUpdateError) throw parentUpdateError;
       }
       orderStatus = allDone ? "completed" : anyFailed ? "needs_information" : "processing";
