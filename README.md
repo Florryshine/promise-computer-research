@@ -47,6 +47,6 @@ Required Vercel environment variables:
 - `PAIRGATE_BASE_URL` — optional; defaults to `https://pairgate.com/api/v1`.
 - `PAIRGATE_TEST_MODE` — defaults to `true`; requests use Pairgate's documented `/test` endpoints while true. Set explicitly to `false` in the production environment only after confirming test responses, configuring the webhook secret/URL, and approving live fulfilment. Orders created in test mode are not proof of a live provider purchase and require a deliberate retry after switching to live mode.
 
-The integration currently automates airtime and data purchases. Cable TV, electricity, exam pins and data pins must remain unavailable for automatic fulfilment until their Pairgate-specific forms, verification/catalogue endpoints, and request fields have been implemented and tested. Paystack remains the customer payment gateway; Pairgate is the fulfilment provider.
+Pairgate fulfilment code covers airtime, mobile data, cable TV, electricity, exam PINs and data PINs. Before live use, verify each service against Pairgate's current API/catalogue and webhook payloads. Electricity and exam-PIN orders must remain processing until actual delivery details are saved; test-mode responses are never proof of live fulfilment. Paystack remains the customer payment gateway; Pairgate is the fulfilment provider.
 
 Pairgate documentation: `https://pairgate.com/developers`.
