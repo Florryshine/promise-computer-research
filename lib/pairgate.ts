@@ -267,8 +267,15 @@ async function updateFinalStatus(admin: any, order: any, transaction: any, statu
   if (txUpdateError) throw txUpdateError;
 
   if (status === "successful") {
+    const baseFormData = { ...(order.form_data || {}) };
+    if (baseFormData.pairgate_test_mode === true) {
+      delete baseFormData.delivery_pin;
+      delete baseFormData.delivery_pins;
+      delete baseFormData.delivery_completed_at;
+    }
     const updatedForm = {
-      ...(order.form_data || {}),
+      ...baseFormData,
+      pairgate_test_mode: false,
       ...(deliveredPin ? { delivery_pin: deliveredPin } : {}),
       ...(pinText ? { delivery_pins: pinText } : {}),
       ...(clean(first(providerData, "batch_id")) ? { delivery_batch_id: clean(first(providerData, "batch_id")) } : {}),
@@ -422,6 +429,12 @@ export async function fulfillOrder(orderId: string) {
     return { status: "successful", message: "Already fulfilled with delivery details.", transaction: existing };
   }
   if (testModeAttempt && TEST_MODE) {
+    const { error: testModeOrderError } = await admin.from("orders").update({
+      status: "needs_information",
+      admin_note: "The saved Pairgate attempt used TEST MODE. Any token/PIN shown by that attempt is not trusted as live delivery. Set PAIRGATE_TEST_MODE=false in the deployed environment, verify live wallet funds, then deliberately retry this already-paid order.",
+      form_data: { ...(order.form_data || {}), pairgate_test_mode: true, delivery_status_message: "Test-mode attempt only — waiting for live fulfilment." }
+    }).eq("id", order.id);
+    if (testModeOrderError) throw testModeOrderError;
     return { status: "test_mode", message: "This order's previous attempt used Pairgate TEST MODE. Set PAIRGATE_TEST_MODE=false in the deployed environment, verify Pairgate has sufficient live wallet funds, then retry this already-paid order. No live purchase has been confirmed." };
   }
   const explicitProviderRejection = Boolean(existing && existing.status === "failed" && (
