@@ -298,6 +298,22 @@ async function checkPendingTransaction(admin: any, order: any, transaction: any)
     const result = await pairgateRequest("/transaction/status", "GET", { reference_code: referenceCode });
     const status = (TEST_MODE || isTestModePayload(result)) ? "pending" : statusOf(result);
     await updateFinalStatus(admin, order, transaction, status, result);
+    if (status === "pending") {
+      const service = Array.isArray(order.services) ? order.services[0] : order.services;
+      const slug = String(service?.slug || "");
+      const hasToken = Boolean(clean(order.form_data?.delivery_pin));
+      const pinsText = clean(order.form_data?.delivery_pins);
+      const expectedPins = Math.max(1, Number(order.form_data?.quantity || 1));
+      const deliveredPins = Math.max((pinsText.match(/PIN:\s*(?!pending\b)[^|\n]+/gi) || []).length, hasToken ? 1 : 0);
+      const deliveryStillMissing = slug === "electricity-bill" ? !hasToken : slug === "exam-pins" ? deliveredPins < expectedPins || /PIN pending/i.test(pinsText) : false;
+      if (deliveryStillMissing) {
+        const { error: orderUpdateError } = await admin.from("orders").update({
+          status: "processing",
+          admin_note: "The previous order status did not have proof of delivery. Pairgate has not yet confirmed the required token/PIN delivery; the order is being tracked and was not resubmitted.",
+        }).eq("id", order.id);
+        if (orderUpdateError) throw orderUpdateError;
+      }
+    }
     return { status, result, message: status === "pending" ? "Pairgate transaction is still processing. It was not resubmitted." : "Pairgate transaction status checked: " + status + "." };
   } catch (error) {
     return { status: "pending", message: "Existing Pairgate transaction was not resubmitted. Status check failed: " + (error instanceof Error ? error.message : "unknown error") };
