@@ -331,6 +331,15 @@ export async function fulfillOrder(orderId: string) {
   if (existing?.status === "successful") return { status: "successful", message: "Already fulfilled.", transaction: existing };
 
   const responseStatus = clean(existing?.response?.data?.status ?? existing?.response?.status).toLowerCase();
+  const testModeAttempt = Boolean(existing && (
+    existing.response?.test_mode === true ||
+    existing.response?.retryable_test_attempt === true ||
+    existing.response?.data?.test_mode === true ||
+    existing.response?.data?.data?.test_mode === true
+  ));
+  if (testModeAttempt && TEST_MODE) {
+    return { status: "test_mode", message: "This order's previous attempt used Pairgate TEST MODE. Set PAIRGATE_TEST_MODE=false in the deployed environment, verify Pairgate has sufficient live wallet funds, then retry this already-paid order. No live purchase has been confirmed." };
+  }
   const explicitProviderRejection = Boolean(existing && existing.status === "failed" && (
     existing?.response?.data?.status === false ||
     existing?.response?.status === false ||
@@ -339,7 +348,7 @@ export async function fulfillOrder(orderId: string) {
   ));
   // A confirmed provider rejection can be retried against the same paid order.
   // Unknown outcomes are status-checked, never blindly resubmitted, to reduce duplicate delivery.
-  const retryableProviderRejection = explicitProviderRejection;
+  const retryableProviderRejection = explicitProviderRejection || (testModeAttempt && !TEST_MODE);
 
   if (existing && existing.response && Object.keys(existing.response).length > 0 && !retryableProviderRejection) {
     return checkPendingTransaction(admin, order, existing);
@@ -354,7 +363,7 @@ export async function fulfillOrder(orderId: string) {
 
   // Preserve the original failed attempt and use a unique reference for the safe retry.
   const rid = retryableProviderRejection
-    ? baseRequestId + "-R-" + Date.now().toString(36).toUpperCase()
+    ? baseRequestId + (testModeAttempt ? "-LIVE-" : "-R-") + Date.now().toString(36).toUpperCase()
     : baseRequestId;
   if (retryableProviderRejection) {
     await admin.from("orders").update({
