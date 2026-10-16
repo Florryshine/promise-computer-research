@@ -319,7 +319,7 @@ export async function fulfillOrder(orderId: string) {
   const savedPin = clean(order.form_data?.delivery_pin);
   const savedPinsText = clean(order.form_data?.delivery_pins);
   const expectedPins = Math.max(1, Number(order.form_data?.quantity || 1));
-  const deliveredPinCount = (savedPinsText.match(/PIN:\s*(?!pending\b)[^|\n]+/gi) || []).length;
+  const deliveredPinCount = Math.max((savedPinsText.match(/PIN:\s*(?!pending\b)[^|\n]+/gi) || []).length, savedPin ? 1 : 0);
   const hasRequiredDelivery = slug === "electricity-bill"
     ? Boolean(savedPin)
     : slug === "exam-pins"
