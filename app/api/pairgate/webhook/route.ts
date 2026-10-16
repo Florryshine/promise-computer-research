@@ -39,16 +39,20 @@ export async function POST(request: Request) {
     if (!tx) return NextResponse.json({ received: true });
 
     const success = ["successful", "success", "completed"].includes(status);
+    const deliveredValue = event.pin ?? event.token ?? event.electricity_token ?? event.meter_token ?? event.token_number ?? event.voucher_code;
+    const hasDeliveredValue = deliveredValue !== undefined && deliveredValue !== null && String(deliveredValue).trim() !== "";
     const response = { ...(tx.response || {}), webhook: event };
     const { error: updateTxError } = await admin.from("provider_transactions").update({
-      status: success ? "successful" : "failed",
-      provider_status: String(event.message || status),
+      status: success ? ((tx.service_id === "electricity" || tx.service_id === "exam-pin" || tx.service_id === "exam") && !hasDeliveredValue && !Array.isArray(event.pins) ? "pending" : "successful") : "failed",
+      provider_status: success && (tx.service_id === "electricity" || tx.service_id === "exam-pin" || tx.service_id === "exam") && !hasDeliveredValue && !Array.isArray(event.pins)
+        ? "Provider reports success; waiting for token/PIN delivery"
+        : String(event.message || status),
       response
     }).eq("request_id", tx.request_id);
     if (updateTxError) throw updateTxError;
 
     const { data: order, error: orderError } = await admin.from("orders")
-      .select("id,reference,customer_id,form_data,services(title)")
+      .select("id,reference,customer_id,form_data,services(title,slug)")
       .eq("id", tx.order_id).maybeSingle();
     if (orderError) throw orderError;
     if (!order) return NextResponse.json({ received: true });
@@ -59,26 +63,39 @@ export async function POST(request: Request) {
       item: String(event.item || event.plan || ""),
       message: String(event.message || ""),
       recipient: String(event.recipient || ""),
-      token_or_pin: event.pin ? String(event.pin) : "",
+      token_or_pin: hasDeliveredValue ? String(deliveredValue) : "",
       completed_at: String(event.completed_at || new Date().toISOString())
     };
-    let orderStatus = success ? "completed" : "needs_information";
-    let formData: Record<string, any> = { ...(order.form_data || {}), pairgate_delivery: JSON.stringify(delivered), delivery_status_message: delivered.message, delivery_completed_at: delivered.completed_at, ...(event.pin ? { delivery_pin: String(event.pin) } : {}) };
+    const service = Array.isArray(order.services) ? order.services[0] : order.services;
+    const needsDeliveryValue = service?.slug === "electricity-bill" || service?.slug === "exam-pins";
+    const delivered = {
+      event: String(event.event || ""),
+      status: success ? "successful" : "failed",
+      item: String(event.item || event.plan || ""),
+      message: String(event.message || ""),
+      recipient: String(event.recipient || ""),
+      token_or_pin: hasDeliveredValue ? String(deliveredValue) : "",
+      completed_at: String(event.completed_at || new Date().toISOString())
+    };
+    const waitingForDelivery = success && needsDeliveryValue && !hasDeliveredValue && !Array.isArray(event.pins);
+    let orderStatus = success ? (waitingForDelivery ? "processing" : "completed") : "needs_information";
+    let formData: Record<string, any> = { ...(order.form_data || {}), pairgate_delivery: JSON.stringify(delivered), delivery_status_message: waitingForDelivery ? "Provider reports success but has not returned the token/PIN yet." : delivered.message, ...(hasDeliveredValue ? { delivery_pin: String(deliveredValue) } : {}) };
+    if (!waitingForDelivery) formData.delivery_completed_at = delivered.completed_at;
     let orderMessage = success
-      ? "Pairgate confirmed delivery. The token/PIN is included in the order details when provided."
+      ? (waitingForDelivery ? "Pairgate reports success, but the token/PIN has not arrived yet. The order remains processing until delivery details are received." : "Pairgate confirmed delivery. Open the order details to view the delivery information.")
       : "Pairgate reported a failed transaction. Check the provider transaction and refund before retrying.";
     if (tx.service_id === "exam-pin" || tx.service_id === "exam") {
       const currentPins = typeof order.form_data?.delivery_pins === "string" ? order.form_data.delivery_pins.split("\n").filter(Boolean) : [];
-      const nextPin = "Reference: " + referenceCode + " | " + (event.pin ? "PIN: " + String(event.pin) : "PIN pending") + " | " + String(event.item || "") + " | " + (success ? "successful" : "failed");
+      const nextPin = "Reference: " + referenceCode + " | " + (hasDeliveredValue ? "PIN: " + String(deliveredValue) : "PIN pending") + " | " + String(event.item || "") + " | " + (success ? "successful" : "failed");
       const pins = [...currentPins.filter((pin: string) => !pin.includes("Reference: " + referenceCode)), nextPin];
       const { data: childTransactions, error: childrenError } = await admin.from("provider_transactions")
-        .select("status").eq("order_id", order.id).in("service_id", ["exam-pin", "exam"]);
+        .select("status").eq("order_id", order.id).eq("service_id", "exam-pin");
       if (childrenError) throw childrenError;
       const allDone = (childTransactions || []).length > 0 && (childTransactions || []).every((row: any) => row.status === "successful");
       const anyFailed = (childTransactions || []).some((row: any) => row.status === "failed");
-      orderStatus = allDone ? "completed" : anyFailed ? "needs_information" : "processing";
+      orderStatus = allDone && hasDeliveredValue ? "completed" : anyFailed ? "needs_information" : "processing";
       orderMessage = allDone ? "All requested exam PINs have been delivered." : anyFailed ? "At least one exam PIN failed. Contact support before retrying." : "Some exam PINs are still being generated by Pairgate.";
-      formData = { ...(order.form_data || {}), delivery_pins: pins.join("\n"), pairgate_delivery: JSON.stringify(delivered), delivery_status_message: delivered.message, delivery_completed_at: delivered.completed_at, ...(event.pin ? { delivery_pin: String(event.pin) } : {}) };
+      formData = { ...(order.form_data || {}), delivery_pins: pins.join("\n"), pairgate_delivery: JSON.stringify(delivered), delivery_status_message: delivered.message, ...(hasDeliveredValue ? { delivery_pin: String(deliveredValue) } : {}), ...(!waitingForDelivery ? { delivery_completed_at: delivered.completed_at } : {}) };
     }
     const { error: updateOrderError } = await admin.from("orders").update({
       status: orderStatus,
