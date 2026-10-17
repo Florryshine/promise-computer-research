@@ -179,10 +179,11 @@ export default function RequestService(){
     ))return false;
     if(!f.required||String(form[f.field_key]??"").trim())return false;
     // These VTU forms render their own provider/amount/quantity controls above.
-    // Their legacy service_fields rows are intentionally hidden, so validating
-    // those hidden required fields blocks checkout even after the customer has
-    // selected WAEC/NECO/NABTEB in the visible exam selector.
-    if(params.slug==="exam-pins"||kind==="exam")return false;
+    // Their legacy service_fields rows are hidden and must not block checkout.
+    // Exam PINs use the visible WAEC/NECO/NABTEB selector; Data PINs use the
+    // visible network and denomination selectors. Validate those controls in
+    // the form itself and let the server independently validate their values.
+    if(params.slug==="exam-pins"||kind==="exam"||params.slug==="data-pins"||kind==="datapin")return false;
     if(!isVTU||isInternalProviderField(f))return !isVTU;
     if(["data","cable","electricity","exam","datapin"].includes(kind)&&f.field_key==="amount")return false;
     if(kind==="data"&&f.field_key==="network")return false;
