@@ -49,9 +49,16 @@ export async function POST(request: Request) {
       tx = fallback.data;
     }
     if (!tx) {
-      console.warn("Pairgate webhook reference did not match a stored transaction", { referenceCode });
-      // Acknowledge unknown events so a provider retry storm does not occur; reconcile from transaction status polling.
-      return NextResponse.json({ received: true, matched: false });
+      console.warn("Pairgate webhook reference did not match a stored transaction; preserving event for reconciliation", { referenceCode });
+      // Keep unmatched events so they can be reconciled after a delayed transaction insert or reference mismatch.
+      // The migration adds this table; if it has not been applied yet, log the persistence error and still
+      // acknowledge the provider event to avoid retry storms.
+      const { error: storeError } = await admin.from("pairgate_webhook_events").insert({
+        reference_code: referenceCode,
+        payload: parsedEvent
+      });
+      if (storeError) console.error("Could not persist unmatched Pairgate webhook event. Apply the pairgate_webhook_events migration.", storeError.message);
+      return NextResponse.json({ received: true, matched: false, stored: !storeError });
     }
 
     const testModeAttempt = Boolean(
