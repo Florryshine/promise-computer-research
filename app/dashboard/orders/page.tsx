@@ -1,6 +1,7 @@
 import {createClient} from '@/lib/supabase/server';
 import Link from 'next/link';
 import PayButton from './PayButton';
+import RequeryPaymentButton from '@/components/payments/RequeryPaymentButton';
 
 export default async function Orders({searchParams}:{searchParams:Promise<{new?:string;pay?:string}>}){
   const params=await searchParams;
@@ -15,6 +16,8 @@ export default async function Orders({searchParams}:{searchParams:Promise<{new?:
         <div className="flex flex-wrap items-start justify-between gap-3"><div><p className="font-black"><Link href={'/dashboard/orders/'+o.id} className="hover:text-[#0757d5] hover:underline">{o.services?.title||'Service request'}</Link></p><p className="mt-1 text-sm text-[#0757d5] font-bold"><Link href={'/dashboard/orders/'+o.id}>View order details →</Link></p><p className="mt-1 text-xs font-bold text-slate-400">Order #{o.reference} · {new Date(o.created_at).toLocaleDateString('en-NG',{dateStyle:'medium'})}</p></div><span className="rounded-full bg-blue-50 px-3 py-1 text-xs font-bold capitalize text-[#0757d5]">{String(o.status).replace('_',' ')}</span></div>
         <div className="mt-4 flex flex-wrap items-start justify-between gap-4 text-sm"><div className="flex flex-wrap gap-5"><span><b>Payment:</b> <span className="capitalize">{String(o.payment_status).replace('_',' ')}</span></span><span><b>Amount:</b> {Number(o.amount||0)>0?'₦'+Number(o.amount).toLocaleString():'Awaiting quote'}</span></div>
           {Number(o.amount)>0 && ['unpaid','failed'].includes(o.payment_status) && <PayButton orderId={o.id} auto={params.pay==='1' && params.new===o.id}/>} 
+          {Number(o.amount)>0 && o.payment_status==='pending' && <RequeryPaymentButton orderId={o.id}/>}
+          {Number(o.amount)>0 && o.payment_status==='paid' && !['completed','cancelled'].includes(String(o.status)) && <RequeryPaymentButton orderId={o.id} paid/>} 
         </div>
         {Number(o.amount)>0 && o.payment_status==='pending' && <p className="mt-2 text-xs text-slate-500">A payment is already in progress. Check its status instead of paying again.</p>}
       </div>)}
