@@ -20,13 +20,13 @@ function canonicalExamProvider(value:unknown){
  return "";
 }
 
-const INTERNAL_PROVIDER_FIELDS=new Set(["provider_plan_id","plan_id","plan_code","variation_code","package","provider_amount","network_id","cablename_id","cable_provider_id","cableplan_id","disco_id","meter_type_id","provider_id","service_provider","electricity_provider","electricity_company","distribution_company","disco","data_plan_id","nifex_data_plan_id","nifex_plan_id","nifex_data_plan","nifex_plan_code","meter_number","meter_type","exam_type","quantity","denomination","smartcard","smartcard_number","iuc_number"]);
+const INTERNAL_PROVIDER_FIELDS=new Set(["provider_plan_id","plan_id","plan_code","variation_code","package","provider_amount","network_id","cablename_id","cable_provider_id","cableplan_id","disco_id","meter_type_id","provider_id","service_provider","electricity_provider","electricity_company","distribution_company","disco","data_plan_id","data_pin_plan_id","pin_plan_id","nifex_data_plan_id","nifex_plan_id","nifex_data_plan","nifex_plan_code","meter_number","meter_type","exam_type","quantity","denomination","smartcard","smartcard_number","iuc_number"]);
 function isInternalProviderField(field:ServiceField){
  const key=String(field.field_key||"").toLowerCase().replace(/[\s-]+/g,"_");
  const label=String(field.label||"").toLowerCase();
  return INTERNAL_PROVIDER_FIELDS.has(key)
   || /nifex|provider.*plan.*id|plan.*id.*from.*provider|provider.*amount|variation.*code/.test(key)
-  || /nifex|plan id from|provider plan id|provider amount/.test(label);
+  || /nifex|plan id from|provider plan id|provider amount|data pin plan id|recharge pin plan id/.test(label);
 }
 
 export default function RequestService(){
@@ -91,7 +91,7 @@ export default function RequestService(){
   let cancelled=false;
   setEpinLoading(true);setEpinError("");setEpinDenominations([]);
   fetch("/api/pairgate/catalogue?kind=epin&provider="+encodeURIComponent(form.network),{cache:"no-store"})
-   .then(async response=>{const body=await response.json();if(!response.ok)throw new Error(body.error||"Could not load recharge PIN denominations.");return body;})
+   .then(async response=>{const body=await response.json();if(!response.ok)throw new Error(body.error||"Could not load recharge card PIN denominations.");return body;})
    .then(body=>{if(!cancelled)setEpinDenominations(Array.isArray(body.denominations)?body.denominations:[]);})
    .catch(err=>{if(!cancelled)setEpinError(err instanceof Error?err.message:"Could not load denominations.");})
    .finally(()=>{if(!cancelled)setEpinLoading(false);});
@@ -170,6 +170,7 @@ export default function RequestService(){
     // Examination Pins uses the visible Pairgate selector above. Ignore every
     // legacy exam-provider field by key or label, even if old DB metadata uses
     // a different key and regardless of the derived service kind.
+    if(params.slug==="data-pins"&&(/plan.?id/i.test(normalizedKey)||/plan.?id/i.test(normalizedLabel)))return false;
     if(params.slug==="exam-pins"&&(
       normalizedKey.includes("exam_provider")||
       normalizedKey==="provider"||
@@ -258,7 +259,7 @@ export default function RequestService(){
     <label className="block text-sm font-bold">Network *
      <select value={form.network||"mtn"} onChange={e=>{set("network",e.target.value);set("denomination","");}} className="mt-2 w-full rounded-xl border border-slate-200 bg-white px-4 py-3"><option value="mtn">MTN</option><option value="airtel">Airtel</option><option value="glo">Glo</option><option value="9mobile">9mobile</option></select>
     </label>
-    <label className="block text-sm font-bold">Recharge PIN denomination *
+    <label className="block text-sm font-bold">Recharge card PIN denomination *
      <select value={form.denomination||""} onChange={e=>set("denomination",e.target.value)} required disabled={epinLoading||epinDenominations.length===0} className="mt-2 w-full rounded-xl border border-slate-200 bg-white px-4 py-3"><option value="">{epinLoading?"Loading denominations…":"Choose denomination"}</option>{epinDenominations.map(d=><option key={d.value} value={d.value}>{d.label}</option>)}</select>
     </label>
     <label className="block text-sm font-bold">Quantity *<input type="number" min="1" max="10" step="1" value={form.quantity||"1"} onChange={e=>set("quantity",e.target.value)} required className="mt-2 w-full rounded-xl border border-slate-200 px-4 py-3"/></label>
