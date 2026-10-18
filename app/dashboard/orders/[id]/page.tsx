@@ -3,7 +3,6 @@ import Link from 'next/link';
 import {createClient} from '@/lib/supabase/server';
 import {createAdminClient} from '@/lib/supabase/admin';
 import DocumentUpload from './DocumentUpload';
-import RequeryPaymentButton from '@/components/payments/RequeryPaymentButton';
 import PayButton from '../PayButton';
 
 export default async function OrderDetail({params}:{params:Promise<{id:string}>}){
@@ -51,7 +50,7 @@ export default async function OrderDetail({params}:{params:Promise<{id:string}>}
     ? true
     : service?.slug === 'electricity-bill'
     ? !(typeof order.form_data?.delivery_pin === 'string' && order.form_data.delivery_pin.trim())
-    : service?.slug === 'exam-pins'
+    : service?.slug === 'exam-pins' || service?.slug === 'data-pins'
     ? deliveredPinCount < expectedPins || /PIN pending/i.test(savedPinsText)
     : false;
 
@@ -59,20 +58,19 @@ export default async function OrderDetail({params}:{params:Promise<{id:string}>}
     <div className="mb-5"><Link href="/dashboard/orders" className="text-sm font-bold text-[#0757d5]">← Back to my orders</Link></div>
     <section className="rounded-3xl bg-white p-5 shadow-sm sm:p-7">
       <div className="flex flex-wrap items-start justify-between gap-4">
-        <div><p className="text-xs font-bold uppercase tracking-wide text-slate-400">Order {order.reference}</p><h1 className="mt-1 text-2xl font-black">{service?.title||'Service request'}</h1></div>
+        <div><p className="text-xs font-bold uppercase tracking-wide text-slate-400">Order reference · {order.reference}</p><h1 className="mt-1 text-2xl font-black">{service?.title||'Service request'} details</h1><p className="mt-2 text-sm text-slate-500">Placed on {new Date(order.created_at).toLocaleString('en-NG',{dateStyle:'medium',timeStyle:'short'})}</p></div>
         <span className="rounded-full bg-blue-50 px-3 py-1 text-xs font-bold capitalize text-[#0757d5]">{String(order.status).replace('_',' ')}</span>
       </div>
       <div className="mt-5 grid gap-3 sm:grid-cols-2">
-        <div className="rounded-2xl bg-slate-50 p-4"><p className="text-xs font-bold text-slate-400">Payment</p><p className="mt-1 font-bold capitalize">{String(order.payment_status).replace('_',' ')}</p>{Number(order.amount||0)>0&&(!['completed','cancelled'].includes(String(order.status)) || missingRequiredDelivery)&&<RequeryPaymentButton orderId={order.id} paid={order.payment_status==='paid'}/>}</div>
+        <div className="rounded-2xl bg-slate-50 p-4"><p className="text-xs font-bold text-slate-400">Payment</p><p className="mt-1 font-bold capitalize">{String(order.payment_status).replace('_',' ')}</p></div>
         <div className="rounded-2xl bg-slate-50 p-4"><p className="text-xs font-bold text-slate-400">Amount</p><p className="mt-1 font-bold">₦{Number(order.amount||0).toLocaleString()}</p>{Number(order.amount||0)<=0&&order.payment_status!=='paid'&&<p className="mt-2 text-sm text-amber-800">Awaiting a quote from Promise Computer Research. You will see the amount here when it is ready.</p>}{Number(order.amount||0)>0&&['unpaid','failed'].includes(String(order.payment_status))&&<div className="mt-3"><PayButton orderId={order.id}/></div>}</div>
       </div>
       {order.form_data?.pairgate_test_mode!==true && typeof order.form_data?.delivery_pin==='string' && order.form_data.delivery_pin.trim() && <div className="mt-5 rounded-2xl border-2 border-emerald-300 bg-emerald-50 p-5"><p className="text-xs font-black uppercase tracking-wide text-emerald-800">{service?.slug==='electricity-bill'?'Your prepaid electricity token':service?.slug==='exam-pins'?'Your examination PIN':'Your delivery PIN / token'}</p><p className="mt-2 break-words font-mono text-xl font-black tracking-wide text-slate-900">{order.form_data.delivery_pin}</p><p className="mt-2 text-sm text-emerald-900">{service?.slug==='electricity-bill'?'Enter this token on your prepaid meter. Keep it for your records.':'Keep this delivery information for your records.'}</p></div>}
-      {order.form_data?.pairgate_test_mode!==true && service?.slug==='exam-pins' && typeof order.form_data?.delivery_pins==='string' && order.form_data.delivery_pins.trim() && <div className="mt-5 rounded-2xl border-2 border-emerald-300 bg-emerald-50 p-5"><p className="text-xs font-black uppercase tracking-wide text-emerald-800">All examination PIN delivery details</p><p className="mt-2 whitespace-pre-wrap break-words font-mono text-sm font-bold text-slate-900">{order.form_data.delivery_pins}</p></div>}
+      {order.form_data?.pairgate_test_mode!==true && (service?.slug==='exam-pins' || service?.slug==='data-pins') && typeof order.form_data?.delivery_pins==='string' && order.form_data.delivery_pins.trim() && <div className="mt-5 rounded-2xl border-2 border-emerald-300 bg-emerald-50 p-5"><p className="text-xs font-black uppercase tracking-wide text-emerald-800">service?.slug==='data-pins'?'Your recharge card PIN details':'All examination PIN delivery details'</p><p className="mt-2 whitespace-pre-wrap break-words font-mono text-sm font-bold text-slate-900">{order.form_data.delivery_pins}</p></div>}
       {order.payment_status==='paid' && String(service?.category||'').trim().toUpperCase()==='JAMB' && <div className="mt-5 rounded-2xl border border-emerald-200 bg-emerald-50 p-4"><p className="font-black text-emerald-900">Payment received</p><p className="mt-1 text-sm text-emerald-800">PCR will fulfil this service manually. If you want to send your order details on WhatsApp as well, you can do so below; this is optional.</p><a href={"https://wa.me/2347058391188?text="+encodeURIComponent("PCR JAMB SERVICE ORDER\nService: "+String(service?.title||"") +"\nOrder reference: "+order.reference+"\nFull name: "+String(order.form_data?.full_name||"")+"\nPhone: "+String(order.form_data?.phone||"")+"\nExam year: "+String(order.form_data?.exam_year||"")+"\nJAMB registration number: "+String(order.form_data?.jamb_registration_number||"Not provided"))} target="_blank" rel="noreferrer" className="mt-3 inline-flex rounded-xl bg-emerald-700 px-4 py-2.5 text-sm font-bold text-white">Optional: Continue on WhatsApp</a></div>}
-      {order.admin_note&&<div className="mt-5 rounded-2xl border border-blue-100 bg-blue-50 p-4"><p className="text-xs font-black uppercase tracking-wide text-[#0757d5]">Update from Promise Computer Research</p><p className="mt-2 whitespace-pre-wrap text-sm text-slate-700">{order.admin_note}</p></div>}
       <div className="mt-5">
         <p className="text-xs font-black uppercase tracking-wide text-slate-400">Submitted information</p>
-        <div className="mt-3 grid gap-3 sm:grid-cols-2">{Object.entries(order.form_data||{}).filter(([key])=>!(order.form_data?.pairgate_test_mode===true&&['delivery_pin','delivery_pins','delivery_completed_at'].includes(key))).map(([key,value])=><div key={key} className="rounded-2xl border border-slate-200 p-4"><p className="text-[11px] font-bold uppercase tracking-wide text-slate-400">{key.replaceAll('_',' ')}</p><p className="mt-1 whitespace-pre-wrap break-words text-sm font-semibold text-slate-700">{typeof value==="object"&&value!==null?JSON.stringify(value,null,2):String(value??"—")}</p></div>)}</div>
+        <div className="mt-3 grid gap-3 sm:grid-cols-2">{Object.entries(order.form_data||{}).filter(([key])=>!['pairgate_test_mode','delivery_pin','delivery_pins','delivery_completed_at','delivery_status_message','provider_reference','provider_response','diagnosis','cause','error','admin_note'].includes(key)).map(([key,value])=><div key={key} className="rounded-2xl border border-slate-200 p-4"><p className="text-[11px] font-bold uppercase tracking-wide text-slate-400">{key.replaceAll('_',' ')}</p><p className="mt-1 whitespace-pre-wrap break-words text-sm font-semibold text-slate-700">{typeof value==="object"&&value!==null?JSON.stringify(value,null,2):String(value??"—")}</p></div>)}</div>
       </div>
       <div className="mt-5">
         <p className="text-xs font-black uppercase tracking-wide text-slate-400">Documents</p>
