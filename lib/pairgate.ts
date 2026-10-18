@@ -210,7 +210,7 @@ function hasRequiredDeliveryPayload(slug: string, payload: any): boolean {
   const scalar = first(data, "pin", "token", "electricity_token", "meter_token", "token_number", "voucher_code");
   const pins = Array.isArray(data?.pins) ? data.pins : [];
   if (slug === "electricity-bill") return Boolean(clean(first(data, "token", "electricity_token", "meter_token", "token_number")));
-  if (slug === "exam-pins") return Boolean(clean(scalar)) || pins.some((pin: any) => Boolean(pin?.pin || pin?.voucher_code));
+  if (slug === "exam-pins" || slug === "data-pins") return Boolean(clean(scalar)) || pins.some((pin: any) => Boolean(pin?.pin || pin?.pin_code || pin?.voucher_code || pin?.token));
   return true;
 }
 
@@ -243,7 +243,7 @@ async function updateFinalStatus(admin: any, order: any, transaction: any, statu
       : [raw ? "PIN: " + raw : "", serial ? "Serial: " + serial : "", item.denomination ? "Denomination: ₦" + item.denomination : ""].filter(Boolean).join(" | ");
   }).filter(Boolean).join("\n");
   const tokenRequired = slug === "electricity-bill";
-  const pinRequired = slug === "exam-pins";
+  const pinRequired = slug === "exam-pins" || slug === "data-pins";
   const expectedPinCount = Math.max(1, Number(order.form_data?.quantity || 1));
   const scalarPin = clean(first(providerData, "pin", "voucher_code", "token"));
   const deliveredPinCount = pins.filter((item: any) => Boolean(first(item, "pin", "pin_code", "voucher_code", "token") || first(item, "serial", "serial_number"))).length || (scalarPin ? 1 : 0);
@@ -381,13 +381,13 @@ export async function fulfillOrder(orderId: string) {
   const deliveredPinCount = Math.max((savedPinsText.match(/PIN:\s*(?!pending\b)[^|\n]+/gi) || []).length, savedPin ? 1 : 0);
   const hasRequiredDelivery = slug === "electricity-bill"
     ? Boolean(savedPin)
-    : slug === "exam-pins"
+    : (slug === "exam-pins" || slug === "data-pins")
     ? deliveredPinCount >= expectedPins && !/PIN pending/i.test(savedPinsText)
     : true;
   // Leave completed non-token services finalized. Electricity/exam orders are
   // checked against their provider transaction so a legacy test-mode result
   // cannot masquerade as a real token/PIN delivery.
-  if (String(order.status) === "completed" && !["electricity-bill", "exam-pins"].includes(slug)) {
+  if (String(order.status) === "completed" && !["electricity-bill", "exam-pins", "data-pins"].includes(slug)) {
     return { status: "completed", message: "This order is already finalized. No new provider purchase was submitted." };
   }
 

@@ -28,7 +28,7 @@ export async function GET(request:Request){
    return NextResponse.json({providers},{headers:{"Cache-Control":"no-store"}});
   }
   if(kind==="epin"){
-   const payload=await pairgateRequest("/recharge-pins/denominations","GET",provider?{provider_id:provider}:undefined);
+   const payload=await pairgateRequest("/epin/denominations","GET",provider?{provider_id:provider}:undefined);
    const denominations=rows(payload).map((p:any)=>({value:Number(p.denomination??p.amount??p.value),label:clean(p.description)||("₦"+Number(p.denomination??p.amount??p.value).toLocaleString()+" recharge PIN")})).filter((p:any)=>Number.isFinite(p.value)&&p.value>0);
    return NextResponse.json({denominations},{headers:{"Cache-Control":"no-store"}});
   }

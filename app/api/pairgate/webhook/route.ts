@@ -122,7 +122,7 @@ export async function POST(request: Request) {
     const savedPinCount = Math.max((savedPinsText.match(/PIN:\s*(?!pending\b)[^|\n]+/gi) || []).length, order.form_data?.delivery_pin ? 1 : 0);
     const existingDeliveryComplete = service?.slug === "electricity-bill"
       ? Boolean(order.form_data?.delivery_pin)
-      : service?.slug === "exam-pins"
+      : (service?.slug === "exam-pins" || service?.slug === "data-pins")
       ? savedPinCount >= expectedPinCount && !/PIN pending/i.test(savedPinsText)
       : false;
     // An old/duplicate webhook must not overwrite a newer live delivery.
@@ -148,7 +148,7 @@ export async function POST(request: Request) {
     const waitingForDelivery = success && (
       service?.slug === "electricity-bill"
         ? !hasDeliveredValue
-        : service?.slug === "exam-pins"
+        : (service?.slug === "exam-pins" || service?.slug === "data-pins")
         ? !hasDeliveredValue && !hasPinArray
         : false
     );
@@ -210,7 +210,7 @@ export async function POST(request: Request) {
         user_id: order.customer_id,
         title: actuallyCompleted ? "Order completed" : orderStatus === "needs_information" ? "Order needs attention" : "Order update",
         message: actuallyCompleted
-          ? "Pairgate completed order " + order.reference + ". Open your order details to view delivery information."
+          ? "Pairgate completed order " + order.reference + ". " + (service?.slug === "data-pins" || service?.slug === "exam-pins" || service?.slug === "electricity-bill" ? "Delivery details: " + String(formData.delivery_pins || formData.delivery_pin || "Open order details to view the PIN/token.") : "Open your order details to view delivery information.")
           : success
           ? "Pairgate reported success for order " + order.reference + ", but delivery is not yet fully confirmed. The order remains under processing."
           : "Pairgate reported a failed transaction for order " + order.reference + ". Contact support if the provider wallet has not been refunded."
