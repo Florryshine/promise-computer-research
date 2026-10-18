@@ -217,7 +217,15 @@ function hasRequiredDeliveryPayload(slug: string, payload: any): boolean {
 function statusOf(payload: any): string {
   const nested = payload?.data ?? payload;
   const value = nested?.status;
-  if (value === true) return "processing";
+  const message = clean(nested?.message || payload?.message).toLowerCase();
+  const pinRows = Array.isArray(nested?.pins) ? nested.pins : [];
+  const hasPins = pinRows.some((row: any) => Boolean(first(row, "pin", "pin_code", "voucher_code", "token")));
+  // Pairgate e-PIN purchase responses use data.status=true as an API flag,
+  // not a fulfillment state. A success message plus actual PIN payload means delivered.
+  if (value === true) {
+    if (hasPins && /successfully purchased|purchase successful|success/i.test(message)) return "successful";
+    return "processing";
+  }
   if (value === false) return "failed";
   const status = clean(value || payload?.status || nested?.message || payload?.message).toLowerCase();
   if (["successful", "success", "completed", "complete", "delivered"].includes(status)) return "successful";
