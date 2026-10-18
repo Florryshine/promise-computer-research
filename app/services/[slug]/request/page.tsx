@@ -178,6 +178,8 @@ export default function RequestService(){
       normalizedLabel.includes("exam provider")||
       normalizedLabel.includes("examination provider")
     ))return false;
+    // Data PINs have visible network, denomination and quantity controls; ignore hidden legacy plan-ID fields.
+    if(params.slug==="data-pins"||kind==="datapin")return false;
     if(!f.required||String(form[f.field_key]??"").trim())return false;
     // These VTU forms render their own provider/amount/quantity controls above.
     // Their legacy service_fields rows are intentionally hidden, so validating
