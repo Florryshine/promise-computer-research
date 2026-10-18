@@ -131,7 +131,7 @@ export async function POST(request:Request){
    const denomination=Number(formData.denomination||0);
    const quantity=Number(formData.quantity||1);
    if(!["mtn","airtel","glo","9mobile"].includes(network)||!Number.isInteger(quantity)||quantity<1||quantity>10)return NextResponse.json({error:"Choose a supported network and quantity from 1 to 10."},{status:400});
-   const payload=await pairgateRequest("/recharge-pins/denominations","GET",{provider_id:network});
+   const payload=await pairgateRequest("/epin/denominations","GET",{provider_id:network});
    const denominations=rows(payload);
    if(!denominations.some((p:any)=>Number(p.denomination??p.amount??p.value)===denomination))return NextResponse.json({error:"That denomination is not currently available for this network."},{status:409});
    const providerAmount=denomination*quantity;
