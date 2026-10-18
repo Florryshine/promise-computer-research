@@ -210,7 +210,7 @@ function hasRequiredDeliveryPayload(slug: string, payload: any): boolean {
   const scalar = first(data, "pin", "token", "electricity_token", "meter_token", "token_number", "voucher_code");
   const pins = Array.isArray(data?.pins) ? data.pins : [];
   if (slug === "electricity-bill") return Boolean(clean(first(data, "token", "electricity_token", "meter_token", "token_number")));
-  if (slug === "exam-pins") return Boolean(clean(scalar)) || pins.some((pin: any) => Boolean(pin?.pin || pin?.voucher_code));
+  if (slug === "exam-pins" || slug === "data-pins") return Boolean(clean(scalar)) || pins.some((pin: any) => Boolean(pin?.pin || pin?.pin_code || pin?.voucher_code || pin?.token));
   return true;
 }
 
@@ -381,7 +381,7 @@ export async function fulfillOrder(orderId: string) {
   const deliveredPinCount = Math.max((savedPinsText.match(/PIN:\s*(?!pending\b)[^|\n]+/gi) || []).length, savedPin ? 1 : 0);
   const hasRequiredDelivery = slug === "electricity-bill"
     ? Boolean(savedPin)
-    : slug === "exam-pins"
+    : (slug === "exam-pins" || slug === "data-pins")
     ? deliveredPinCount >= expectedPins && !/PIN pending/i.test(savedPinsText)
     : true;
   // Leave completed non-token services finalized. Electricity/exam orders are
