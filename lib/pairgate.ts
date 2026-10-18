@@ -243,7 +243,7 @@ async function updateFinalStatus(admin: any, order: any, transaction: any, statu
       : [raw ? "PIN: " + raw : "", serial ? "Serial: " + serial : "", item.denomination ? "Denomination: ₦" + item.denomination : ""].filter(Boolean).join(" | ");
   }).filter(Boolean).join("\n");
   const tokenRequired = slug === "electricity-bill";
-  const pinRequired = slug === "exam-pins";
+  const pinRequired = slug === "exam-pins" || slug === "data-pins";
   const expectedPinCount = Math.max(1, Number(order.form_data?.quantity || 1));
   const scalarPin = clean(first(providerData, "pin", "voucher_code", "token"));
   const deliveredPinCount = pins.filter((item: any) => Boolean(first(item, "pin", "pin_code", "voucher_code", "token") || first(item, "serial", "serial_number"))).length || (scalarPin ? 1 : 0);
@@ -387,7 +387,7 @@ export async function fulfillOrder(orderId: string) {
   // Leave completed non-token services finalized. Electricity/exam orders are
   // checked against their provider transaction so a legacy test-mode result
   // cannot masquerade as a real token/PIN delivery.
-  if (String(order.status) === "completed" && !["electricity-bill", "exam-pins"].includes(slug)) {
+  if (String(order.status) === "completed" && !["electricity-bill", "exam-pins", "data-pins"].includes(slug)) {
     return { status: "completed", message: "This order is already finalized. No new provider purchase was submitted." };
   }
 
