@@ -26,7 +26,7 @@ const presentation:Record<string,ServicePresentation> = {
   'airtime-recharge': {icon:'📱',details:['Select your network and recipient phone number','Enter airtime amount','Automatic Pairgate fulfilment after payment','3% service charge']},
   'data-subscription': {icon:'📶',details:['Select network and data plan','Enter the recipient phone number','Automatic Pairgate fulfilment after payment','5% service charge']},
   'exam-pins': {icon:'🎫',details:['Choose WAEC, NECO or NABTEB and quantity','PINs delivered after Pairgate completes processing','5% service charge']},
-  'data-pins': {icon:'📲',details:['Choose network, denomination and quantity','PINs delivered after Pairgate completes processing','5% service charge']},
+  'data-pins': {icon:'🎫',details:['Choose network, recharge card denomination and quantity','Recharge card PINs and serial numbers are delivered after Pairgate completes processing','5% service charge']},
   'post-utme-screening': {icon:'🎓',details:['Institution-specific pricing','Online screening assistance','WhatsApp support']},
   'school-fees-acceptance-gst-ent': {icon:'💳',details:['School fee assistance','Acceptance fee processing','GST/ENT payments']},
   'course-registration-clearance': {icon:'📝',details:['Course registration support','Online clearance','Portal assistance']},
