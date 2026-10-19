@@ -329,21 +329,30 @@ async function markNeedsAttention(admin: any, order: any, message: string) {
 // Pairgate's status endpoint is keyed by its own transaction reference. For some products (e.g. e-pins) the
 // purchase response only echoes OUR client reference, so looking that up as `reference_code` returns
 // 404 "Transaction not found". Try each plausible identifier before giving up; 404 just means "try the next".
-async function lookupTransactionStatus(identifiers: string[], testMode: boolean) {
+async function lookupTransactionStatus(identifiers: string[], testMode: boolean, slug: string) {
   const attempts: Array<[string, string]> = [];
   for (const id of identifiers) {
     attempts.push(["reference_code", id], ["reference", id]);
   }
   const failures: string[] = [];
+  let firstUsableResponse: any = null;
   for (const [param, value] of attempts) {
     try {
-      return await pairgateRequest("/transaction/status", "GET", { [param]: value }, testMode);
+      const result = await pairgateRequest("/transaction/status", "GET", { [param]: value }, testMode);
+      const status = statusOf(result);
+      const hasDelivery = hasRequiredDeliveryPayload(slug, result);
+      // A 200 response for the parent transaction may only say "pending". Do not stop there:
+      // continue through per-PIN child references until the actual PIN/token is found.
+      if (hasDelivery || status === "failed") return result;
+      if (firstUsableResponse === null) firstUsableResponse = result;
+      failures.push(param + "=" + value + " -> response received but required delivery data is missing (status: " + status + ")");
     } catch (error) {
       const message = error instanceof Error ? error.message : "unknown error";
       failures.push(param + "=" + value + " -> " + message);
-      if (!/PAIRGATE_HTTP_(404|400|422)/.test(message)) throw error;
+      if (!/PAIRGATE_HTTP_(404|400|422)/.test(message)) throw new Error("Pairgate status lookup failed. Attempts: " + failures.join("; "));
     }
   }
+  if (firstUsableResponse !== null) return firstUsableResponse;
   throw new Error("Pairgate could not find this transaction. Tried: " + failures.join("; "));
 }
 
@@ -409,7 +418,7 @@ async function checkPendingTransaction(admin: any, order: any, transaction: any)
     return { status: "pending", message: "Pairgate was contacted but did not return a transaction reference. Check Pairgate history before any retry." };
   }
   try {
-    const result = await lookupTransactionStatus(uniqueIdentifiers, transactionWasTestMode);
+    const result = await lookupTransactionStatus(uniqueIdentifiers, transactionWasTestMode, slug);
     const status = (transactionWasTestMode || isTestModePayload(result)) ? "pending" : statusOf(result);
     await updateFinalStatus(admin, order, transaction, status, result);
     const effectiveStatus = status === "successful" && !hasRequiredDeliveryPayload(slug, result) ? "pending" : status;
