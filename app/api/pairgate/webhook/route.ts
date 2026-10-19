@@ -167,10 +167,7 @@ export async function POST(request: Request) {
       const batchChildren = (childRows || []).filter((child: any) => !parentReference || child.request_data?.parent_reference === parentReference);
       const pins = batchChildren.map((child: any) => {
         const childEvent = child.response?.webhook || child.response?.data || child.response || {};
-        const childRaw = childEvent.pin ?? childEvent.token ?? childEvent.voucher_code;
-        const childValue = typeof childRaw === "string" && childRaw.includes("<=>")
-          ? childRaw.split("<=>").map((part: string, index: number) => (index === 0 ? "PIN: " : "Serial: ") + part.trim()).filter((part: string) => !part.endsWith(": ")).join(" | ")
-          : childRaw || (Array.isArray(childEvent.pins) ? childEvent.pins.map((pin: any) => [pin.pin ? "PIN: " + pin.pin : "", pin.serial ? "Serial: " + pin.serial : ""].filter(Boolean).join(" | ")).filter(Boolean).join("; ") : "");
+        const childValue = extractPins(childEvent).filter(item => item.pin).map(formatPinLine).join("; ");
         return "Reference: " + String(child.provider_reference || child.request_id) + " | " +
           (childValue ? String(childValue).startsWith("PIN: ") ? String(childValue) : "PIN: " + String(childValue) : child.status === "successful" ? "PIN delivered (value not parsed)" : "PIN pending") +
           " | " + String(childEvent.item || event.item || "") + " | " + String(child.status || "pending");
@@ -179,7 +176,7 @@ export async function POST(request: Request) {
       const expectedPinCount = Math.max(1, Number(order.form_data?.quantity || 1));
       const allDone = childTransactions.length >= expectedPinCount && childTransactions.every((row: any) => {
         const childEvent = row.response?.webhook || row.response?.data || row.response || {};
-        return row.status === "successful" && Boolean(childEvent.pin || childEvent.token || childEvent.voucher_code || childEvent.electricity_token || childEvent.meter_token || childEvent.token_number || (Array.isArray(childEvent.pins) && childEvent.pins.some((pin: any) => pin?.pin || pin?.voucher_code)));
+        return row.status === "successful" && extractPins(childEvent).some(item => Boolean(item.pin));
       });
       const anyFailed = childTransactions.some((row: any) => row.status === "failed");
       if (allDone) {
