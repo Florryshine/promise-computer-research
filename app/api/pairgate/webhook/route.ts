@@ -1,6 +1,7 @@
 import crypto from "crypto";
 import { NextResponse } from "next/server";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { extractPins, formatPinLine } from "@/lib/pin-delivery";
 
 export async function POST(request: Request) {
   try {
@@ -88,22 +89,17 @@ export async function POST(request: Request) {
     const deliveredValue = typeof rawDeliveredValue === "string" && rawDeliveredValue.includes("<=>")
       ? rawDeliveredValue.split("<=>").map((part: string, index: number) => (index === 0 ? "PIN: " : "Serial: ") + part.trim()).filter((part: string) => !part.endsWith(": ")).join(" | ")
       : rawDeliveredValue;
-    const eventPins = Array.isArray(event.pins) ? event.pins : [];
-    const normalizePin = (pin: any) => {
-      const raw = pin?.pin ?? pin?.pin_code ?? pin?.voucher_code ?? pin?.token ?? "";
-      const serial = pin?.serial ?? pin?.serial_number ?? "";
-      if (typeof raw === "string" && raw.includes("<=>")) {
-        return raw.split("<=>").map((part: string, index: number) => (index === 0 ? "PIN: " : "Serial: ") + part.trim()).filter((part: string) => !part.endsWith(": ")).join(" | ");
-      }
-      return [raw ? "PIN: " + String(raw) : "", serial ? "Serial: " + String(serial) : ""].filter(Boolean).join(" | ");
-    };
+    // Shared extractor: understands string pins, "pin<=>serial", and alternate field names.
+    const normalizedEventPins: string[] = Array.isArray(event.pins)
+      ? extractPins({ pins: event.pins, face_value: event.face_value }).map(formatPinLine).filter(Boolean)
+      : [];
     const hasDeliveredValue = deliveredValue !== undefined && deliveredValue !== null && String(deliveredValue).trim() !== "";
-    const normalizedEventPins = eventPins.map(normalizePin).filter(Boolean);
     const hasPinArray = normalizedEventPins.length > 0;
+    const deliveryService = ["electricity", "exam-pin", "exam", "epin"].includes(String(tx.service_id));
     const response = { ...(tx.response || {}), webhook: event };
     const { error: updateTxError } = await admin.from("provider_transactions").update({
-      status: success ? ((tx.service_id === "electricity" || tx.service_id === "exam-pin" || tx.service_id === "exam") && !hasDeliveredValue && !hasPinArray ? "pending" : "successful") : "failed",
-      provider_status: success && (tx.service_id === "electricity" || tx.service_id === "exam-pin" || tx.service_id === "exam") && !hasDeliveredValue && !hasPinArray
+      status: success ? (deliveryService && !hasDeliveredValue && !hasPinArray ? "pending" : "successful") : "failed",
+      provider_status: success && deliveryService && !hasDeliveredValue && !hasPinArray
         ? "Provider reports success; waiting for token/PIN delivery"
         : String(event.message || status),
       response
