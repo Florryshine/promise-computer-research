@@ -57,7 +57,7 @@ export default function RequestService(){
   const loadedFields=(f??[]) as ServiceField[];
   setService(s);setFields(loadedFields);
   if(params.slug==="jamb-services"){
-   const {data:children}=await supabase.from("services").select("slug,title,description,price,price_type").eq("active",true).eq("category","JAMB").neq("slug","jamb-services").order("sort_order");
+   const {data:children}=await supabase.from("services").select("slug,title,description,price,price_type").eq("active",true).eq("category","JAMB").neq("slug","jamb-services").neq("slug","jamb-original-result-printing").order("sort_order");
    setJambServices(children??[]);
   }
   // Automatically choose fields with only one valid option (for example, Airtime type = VTU).
