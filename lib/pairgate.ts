@@ -334,17 +334,29 @@ async function lookupTransactionStatus(identifiers: string[], testMode: boolean)
   for (const id of identifiers) {
     attempts.push(["reference_code", id], ["reference", id]);
   }
-  let lastError: unknown = null;
+  const failures: string[] = [];
   for (const [param, value] of attempts) {
     try {
       return await pairgateRequest("/transaction/status", "GET", { [param]: value }, testMode);
     } catch (error) {
-      lastError = error;
-      const message = error instanceof Error ? error.message : "";
+      const message = error instanceof Error ? error.message : "unknown error";
+      failures.push(param + "=" + value + " -> " + message);
       if (!/PAIRGATE_HTTP_(404|400|422)/.test(message)) throw error;
     }
   }
-  throw lastError instanceof Error ? lastError : new Error("Pairgate transaction status lookup failed.");
+  throw new Error("Pairgate could not find this transaction. Tried: " + failures.join("; "));
+}
+
+async function clearStaleTestFlag(admin: any, order: any) {
+  if (order.form_data?.pairgate_test_mode !== true) return;
+  const cleaned = { ...(order.form_data || {}), pairgate_test_mode: false };
+  delete cleaned.delivery_pin;
+  delete cleaned.delivery_pins;
+  delete cleaned.delivery_completed_at;
+  if (/test.?mode/i.test(String(cleaned.delivery_status_message || ""))) delete cleaned.delivery_status_message;
+  const { error } = await admin.from("orders").update({ form_data: cleaned }).eq("id", order.id);
+  if (error) throw error;
+  order.form_data = cleaned;
 }
 
 async function checkPendingTransaction(admin: any, order: any, transaction: any) {
@@ -356,6 +368,8 @@ async function checkPendingTransaction(admin: any, order: any, transaction: any)
     transaction.response?.data?.test_mode === true ||
     transaction.response?.data?.data?.test_mode === true
   );
+
+  if (!transactionWasTestMode) await clearStaleTestFlag(admin, order);
 
   // The purchase response we already stored may contain the PINs/token (this is exactly what happened when a
   // successful e-pin purchase was mis-read as "processing"). Deliver from it first: it costs nothing, cannot
@@ -370,16 +384,32 @@ async function checkPendingTransaction(admin: any, order: any, transaction: any)
     }
   }
 
-  const identifiers = [...new Set([
+  const identifiers = [
     clean(transaction.provider_reference),
     clean(first(transaction.response?.data, "reference_code", "transaction_id", "transaction_reference")),
     clean(transaction.request_id),
-  ].filter(Boolean))];
-  if (!identifiers.length) {
+  ].filter(Boolean);
+
+  // Exam purchases may be fulfilled as separate per-PIN child transactions. Include their provider references
+  // when checking status, because the parent reference is not always recognised by Pairgate.
+  if (transaction.service_id === "exam" || slug === "exam-pins") {
+    const { data: children, error: childrenError } = await admin.from("provider_transactions")
+      .select("request_id,provider_reference,response,request_data,service_id")
+      .eq("order_id", order.id)
+      .eq("service_id", "exam-pin");
+    if (childrenError) throw childrenError;
+    const parentReference = String(transaction.request_id || "");
+    for (const child of children || []) {
+      if (child.request_data?.parent_reference && parentReference && child.request_data.parent_reference !== parentReference) continue;
+      identifiers.push(clean(child.provider_reference), clean(first(child.response?.data, "reference_code", "transaction_id", "transaction_reference")), clean(child.request_id));
+    }
+  }
+  const uniqueIdentifiers = [...new Set(identifiers.filter(Boolean))];
+  if (!uniqueIdentifiers.length) {
     return { status: "pending", message: "Pairgate was contacted but did not return a transaction reference. Check Pairgate history before any retry." };
   }
   try {
-    const result = await lookupTransactionStatus(identifiers, transactionWasTestMode);
+    const result = await lookupTransactionStatus(uniqueIdentifiers, transactionWasTestMode);
     const status = (transactionWasTestMode || isTestModePayload(result)) ? "pending" : statusOf(result);
     await updateFinalStatus(admin, order, transaction, status, result);
     const effectiveStatus = status === "successful" && !hasRequiredDeliveryPayload(slug, result) ? "pending" : status;
