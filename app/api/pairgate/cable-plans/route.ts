@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { pairgateRequest } from "@/lib/pairgate";
+import { SERVICE_UNAVAILABLE_MESSAGE } from "@/lib/service-errors";
 
 export async function GET(request: Request) {
   try {
@@ -17,6 +18,7 @@ export async function GET(request: Request) {
     })).filter(row => row.id && row.name && Number.isFinite(row.price) && row.price > 0);
     return NextResponse.json({ plans }, { headers: { "Cache-Control": "no-store" } });
   } catch (error) {
-    return NextResponse.json({ error: error instanceof Error ? error.message : "Could not load cable plans." }, { status: 502 });
+    console.error("Pairgate cable-plan catalogue failed:", error);
+    return NextResponse.json({ error: SERVICE_UNAVAILABLE_MESSAGE }, { status: 503 });
   }
 }
