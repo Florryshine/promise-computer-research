@@ -61,13 +61,20 @@ export async function pairgateRequest(path: string, method: "GET" | "POST" = "GE
   }
 
   const raw = await response.text();
+  const contentType = response.headers.get("content-type") || "";
+  const looksLikeHtml = /text\/html/i.test(contentType) || /^\s*<(?:!doctype|html|head|body)/i.test(raw);
+
+  // Cloudflare/browser challenges are HTML, not API data. Keep the page private.
+  if (looksLikeHtml) {
+    throw new Error("PAIRGATE_UNAVAILABLE: Provider returned a non-API response (HTTP " + response.status + ").");
+  }
+
   let payload: any;
   try { payload = raw ? JSON.parse(raw) : {}; }
-  catch { payload = { message: raw }; }
+  catch { payload = {}; }
 
   if (!response.ok || String(payload?.status || "").toLowerCase() === "error") {
-    const message = first(payload, "message", "detail", "error") || "Pairgate API request failed.";
-    throw new Error("PAIRGATE_HTTP_" + response.status + ": " + message);
+    throw new Error("PAIRGATE_HTTP_" + response.status + ": Provider request failed.");
   }
   return payload;
 }
