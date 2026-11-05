@@ -61,12 +61,14 @@ export async function GET() {
         signal: AbortSignal.timeout(15000),
       });
       const responseBody = await probe.text();
+      const diagnosticLimit = 30000;
       result.educationProbe = {
         httpStatus: probe.status,
         ok: probe.ok,
         contentType: probe.headers.get('content-type') || '',
         cloudflareRayId: probe.headers.get('cf-ray') || '',
-        body: responseBody,
+        body: responseBody.slice(0, diagnosticLimit),
+        bodyTruncated: responseBody.length > diagnosticLimit,
       };
     } catch (error) {
       result.educationProbe = {
