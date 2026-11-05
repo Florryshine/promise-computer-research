@@ -1,6 +1,7 @@
 import crypto from "crypto";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { extractPins, formatPins } from "@/lib/pin-delivery";
+import { customerSafeError } from "@/lib/service-errors";
 
 const BASE_URL = (process.env.PAIRGATE_BASE_URL || "https://pairgate.com/api/v1").replace(/\/+$/, "");
 const API_KEY = (process.env.PAIRGATE_API_KEY || "").trim();
@@ -61,13 +62,20 @@ export async function pairgateRequest(path: string, method: "GET" | "POST" = "GE
   }
 
   const raw = await response.text();
+  const contentType = response.headers.get("content-type") || "";
+  const looksLikeHtml = /text\/html/i.test(contentType) || /^\s*<(?:!doctype|html|head|body)/i.test(raw);
+
+  // Cloudflare/browser challenges are HTML, not API data. Keep the page private.
+  if (looksLikeHtml) {
+    throw new Error("PAIRGATE_UNAVAILABLE: Provider returned a non-API response (HTTP " + response.status + ").");
+  }
+
   let payload: any;
   try { payload = raw ? JSON.parse(raw) : {}; }
-  catch { payload = { message: raw }; }
+  catch { payload = {}; }
 
   if (!response.ok || String(payload?.status || "").toLowerCase() === "error") {
-    const message = first(payload, "message", "detail", "error") || "Pairgate API request failed.";
-    throw new Error("PAIRGATE_HTTP_" + response.status + ": " + message);
+    throw new Error("PAIRGATE_HTTP_" + response.status + ": Provider request failed.");
   }
   return payload;
 }
@@ -321,9 +329,9 @@ async function updateFinalStatus(admin: any, order: any, transaction: any, statu
 async function markNeedsAttention(admin: any, order: any, message: string) {
   await admin.from("orders").update({
     status: "needs_information",
-    admin_note: "Payment received, but Pairgate fulfillment could not start: " + message,
+    admin_note: "Payment received, but this service is temporarily unavailable. Please try again later or contact support.",
   }).eq("id", order.id);
-  return { status: "failed", message };
+  return { status: "failed", message: customerSafeError(message) };
 }
 
 // Pairgate's status endpoint is keyed by its own transaction reference. For some products (e.g. e-pins) the
@@ -433,7 +441,7 @@ async function checkPendingTransaction(admin: any, order: any, transaction: any)
     }
     return { status: effectiveStatus, result, message: effectiveStatus === "pending" || effectiveStatus === "processing" ? "Pairgate has not yet supplied the required delivery details. The existing transaction was checked, not resubmitted." : "Pairgate transaction status checked: " + effectiveStatus + "." };
   } catch (error) {
-    const reason = error instanceof Error ? error.message : "unknown error";
+    const reason = customerSafeError(error);
     const batchId = clean(first(transaction.response?.data, "batch_id"));
     // Make the situation actionable for staff instead of leaving the order silently stuck.
     if (String(order.status) !== "completed") {
@@ -575,12 +583,13 @@ export async function fulfillOrder(orderId: string) {
       : { provider_id: product.network, quantity: product.quantity, denomination: product.denomination, reference: rid };
     result = await pairgateRequest(endpoints[product.kind], "POST", requestBody);
   } catch (error) {
-    const message = error instanceof Error ? error.message : "Pairgate request failed.";
-    const ambiguous = message.startsWith("PAIRGATE_NETWORK_AMBIGUOUS") || /PAIRGATE_HTTP_5\d\d/.test(message);
+    const rawMessage = error instanceof Error ? error.message : "Pairgate request failed.";
+    const message = customerSafeError(error);
+    const ambiguous = rawMessage.startsWith("PAIRGATE_NETWORK_AMBIGUOUS") || /PAIRGATE_HTTP_5\d\d/.test(rawMessage);
     await admin.from("provider_transactions").update({
       status: ambiguous ? "pending" : "failed",
       provider_status: ambiguous ? "unknown — check Pairgate transaction history before retrying" : "error",
-      response: { error: message, ambiguous },
+      response: { error: rawMessage, ambiguous },
     }).eq("request_id", rid);
     await admin.from("orders").update({
       status: "needs_information",

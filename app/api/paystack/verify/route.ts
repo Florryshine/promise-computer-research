@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
 import { createAdminClient } from '@/lib/supabase/admin';
 import { fulfillOrder } from '@/lib/pairgate';
+import { customerSafeError } from '@/lib/service-errors';
 
 function diagnose(result: any, expectedAmount: number, expectedCurrency: string) {
   const gatewayStatus = String(result?.data?.status || '').toLowerCase();
@@ -55,7 +56,7 @@ export async function POST(request: Request) {
           paid: true,
           code: 'already_paid_fulfillment_error',
           message: 'Payment is confirmed, but the service provider could not be contacted.',
-          cause: error instanceof Error ? error.message : 'Unknown fulfillment error'
+          cause: customerSafeError(error, 'The service provider is temporarily unavailable. Please try again later.')
         });
       }
     }
@@ -96,6 +97,6 @@ export async function POST(request: Request) {
     return NextResponse.json({ paid: true, code: 'verified', message: 'Payment verified successfully. Fulfillment status: ' + fulfillment?.status + '.', fulfillment });
   } catch (error) {
     console.error('Paystack verification unexpected error:', error);
-    return NextResponse.json({ paid: false, code: 'unexpected_error', message: 'Unexpected verification error.', cause: error instanceof Error ? error.message : 'Unknown error' }, { status: 500 });
+    return NextResponse.json({ paid: false, code: 'unexpected_error', message: 'Unexpected verification error.', cause: customerSafeError(error, 'Could not verify the payment right now.') }, { status: 500 });
   }
 }

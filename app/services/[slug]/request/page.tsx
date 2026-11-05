@@ -12,6 +12,7 @@ type EpinDenomination={value:number;label:string};
 const VTU_SLUGS=new Set(["airtime-recharge","data-subscription","dstv-subscription","gotv-subscription","startimes-subscription","electricity-bill","exam-pins","data-pins"]);
 const FEE_RATE:Record<string,number>={airtime:3,data:5,cable:5,electricity:5,exam:5,datapin:5};
 const EXAM_PIN_PRICES:Record<string,number>={waec:5800,neco:2200,nabt:1500};
+const SERVICE_UNAVAILABLE_MESSAGE="This service is not currently available. Please try again later.";
 function canonicalExamProvider(value:unknown){
  const text=String(value??"").trim().toLowerCase();
  if(text.includes("waec"))return "waec";
@@ -81,7 +82,7 @@ export default function RequestService(){
   fetch("/api/pairgate/catalogue?kind="+catalogueKind,{cache:"no-store"})
    .then(async response=>{const body=await response.json();if(!response.ok)throw new Error(body.error||"Could not load providers.");return body;})
    .then(body=>{if(!cancelled)setUtilityProviders(Array.isArray(body.providers)?body.providers:[]);})
-   .catch(err=>{if(!cancelled)setUtilityError(err instanceof Error?err.message:"Could not load providers.");})
+   .catch(err=>{if(!cancelled)setUtilityError(SERVICE_UNAVAILABLE_MESSAGE);})
    .finally(()=>{if(!cancelled)setUtilityLoading(false);});
   return ()=>{cancelled=true;};
  },[kind]);
@@ -93,7 +94,7 @@ export default function RequestService(){
   fetch("/api/pairgate/catalogue?kind=epin&provider="+encodeURIComponent(form.network),{cache:"no-store"})
    .then(async response=>{const body=await response.json();if(!response.ok)throw new Error(body.error||"Could not load recharge card PIN denominations.");return body;})
    .then(body=>{if(!cancelled)setEpinDenominations(Array.isArray(body.denominations)?body.denominations:[]);})
-   .catch(err=>{if(!cancelled)setEpinError(err instanceof Error?err.message:"Could not load denominations.");})
+   .catch(err=>{if(!cancelled)setEpinError(SERVICE_UNAVAILABLE_MESSAGE);})
    .finally(()=>{if(!cancelled)setEpinLoading(false);});
   return ()=>{cancelled=true;};
  },[kind,form.network]);
@@ -106,7 +107,7 @@ export default function RequestService(){
   fetch("/api/pairgate/catalogue?kind=cable&provider="+provider,{cache:"no-store"})
    .then(async response=>{const body=await response.json();if(!response.ok)throw new Error(body.error||"Could not load TV packages.");return body;})
    .then(body=>{if(!cancelled)setCablePlans(Array.isArray(body.plans)?body.plans:[]);})
-   .catch(err=>{if(!cancelled)setCableError(err instanceof Error?err.message:"Could not load TV packages.");})
+   .catch(err=>{if(!cancelled)setCableError(SERVICE_UNAVAILABLE_MESSAGE);})
    .finally(()=>{if(!cancelled)setCableLoading(false);});
   return ()=>{cancelled=true;};
  },[kind,params.slug]);
@@ -119,7 +120,7 @@ export default function RequestService(){
   fetch("/api/pairgate/data-plans?network="+encodeURIComponent(form.network||"mtn"),{cache:"no-store"})
    .then(async response=>{const body=await response.json();if(!response.ok)throw new Error(body.error||"Could not load data plans.");return body;})
    .then(body=>{if(!cancelled)setDataPlans(Array.isArray(body.plans)?body.plans:[]);})
-   .catch(err=>{if(!cancelled)setPlansError(err instanceof Error?err.message:"Could not load data plans.");})
+   .catch(err=>{if(!cancelled)setPlansError(SERVICE_UNAVAILABLE_MESSAGE);})
    .finally(()=>{if(!cancelled)setPlansLoading(false);});
   return ()=>{cancelled=true;};
  },[kind,form.network]);
@@ -217,7 +218,11 @@ export default function RequestService(){
    const created=await createOrder.json();
    if(!createOrder.ok)throw new Error(created?.error||"Could not submit this request.");
    router.push(orderAmount>0?"/dashboard/orders?new="+created.id+"&pay=1":"/dashboard/orders?new="+created.id);
-  }catch(err){setError(err instanceof Error?err.message:"Could not submit this request.");setLoading(false);}
+  }catch(err){
+   const message=err instanceof Error?err.message:"Could not submit this request.";
+   setError(/PAIRGATE_|Cloudflare|Just a moment|challenge-platform|<\s*!doctype|<\s*html|fetch failed|timed?\s*out|ECONN|ENOTFOUND/i.test(message)||message.length>240?SERVICE_UNAVAILABLE_MESSAGE:message);
+   setLoading(false);
+  }
  }
 
  if(pageLoading)return <main className="section"><div className="container"><p className="text-slate-500">Loading service…</p></div></main>;
@@ -240,21 +245,21 @@ export default function RequestService(){
    </div>}
    {kind==="electricity"&&<div className="space-y-4 rounded-2xl border border-slate-200 p-4">
     <label className="block text-sm font-bold">Electricity provider *
-     <select value={form.provider_id||form.disco_id||form.electricity_provider||form.service_provider||""} onChange={e=>setForm(x=>({...x,provider_id:e.target.value,disco_id:e.target.value,electricity_provider:e.target.value,service_provider:e.target.value,electricity_company:e.target.value,distribution_company:e.target.value,disco:e.target.value}))} required disabled={utilityLoading||utilityProviders.length===0} className="mt-2 w-full rounded-xl border border-slate-200 bg-white px-4 py-3"><option value="">{utilityLoading?"Loading providers…":"Choose your electricity provider"}</option>{utilityProviders.filter(p=>canonicalExamProvider(p.name)||canonicalExamProvider(p.id)).map(p=>{const provider=canonicalExamProvider(p.name)||canonicalExamProvider(p.id);return <option key={p.id} value={provider}>{p.name}</option>})}</select>
+     <select value={form.provider_id||form.disco_id||form.electricity_provider||form.service_provider||""} onChange={e=>setForm(x=>({...x,provider_id:e.target.value,disco_id:e.target.value,electricity_provider:e.target.value,service_provider:e.target.value,electricity_company:e.target.value,distribution_company:e.target.value,disco:e.target.value}))} required disabled={utilityLoading||utilityProviders.length===0} className="mt-2 w-full rounded-xl border border-slate-200 bg-white px-4 py-3"><option value="">{utilityLoading?"Loading providers…":utilityError?"Service temporarily unavailable":"Choose your electricity provider"}</option>{utilityProviders.filter(p=>canonicalExamProvider(p.name)||canonicalExamProvider(p.id)).map(p=>{const provider=canonicalExamProvider(p.name)||canonicalExamProvider(p.id);return <option key={p.id} value={provider}>{p.name}</option>})}</select>
     </label>
     <label className="block text-sm font-bold">Meter number *<input value={form.meter_number||""} onChange={e=>set("meter_number",e.target.value)} required inputMode="numeric" className="mt-2 w-full rounded-xl border border-slate-200 px-4 py-3"/></label>
     <label className="block text-sm font-bold">Meter type *
      <select value={form.meter_type||"1"} onChange={e=>set("meter_type",e.target.value)} className="mt-2 w-full rounded-xl border border-slate-200 bg-white px-4 py-3"><option value="1">Prepaid</option><option value="2">Postpaid</option></select>
     </label>
     <label className="block text-sm font-bold">Electricity amount (minimum ₦1,000) *<input type="number" min="1000" step="100" value={form.amount||""} onChange={e=>set("amount",e.target.value)} required className="mt-2 w-full rounded-xl border border-slate-200 px-4 py-3"/></label>
-    {utilityError&&<p className="rounded-lg bg-amber-50 p-3 text-sm text-amber-900">{utilityError}</p>}
+    {utilityError&&<p role="alert" className="rounded-lg bg-amber-50 p-3 text-sm text-amber-900">{SERVICE_UNAVAILABLE_MESSAGE}</p>}
    </div>}
    {kind==="exam"&&<div className="space-y-4 rounded-2xl border border-slate-200 p-4">
     <label className="block text-sm font-bold">Exam PIN type *
-     <select value={form.exam_type||""} onChange={e=>set("exam_type",e.target.value)} required disabled={utilityLoading||utilityProviders.length===0} className="mt-2 w-full rounded-xl border border-slate-200 bg-white px-4 py-3"><option value="">{utilityLoading?"Loading exam providers…":"Choose exam body"}</option>{utilityProviders.map(p=><option key={p.id} value={p.id}>{p.name}</option>)}</select>
+     <select value={form.exam_type||""} onChange={e=>set("exam_type",e.target.value)} required disabled={utilityLoading||utilityProviders.length===0} className="mt-2 w-full rounded-xl border border-slate-200 bg-white px-4 py-3"><option value="">{utilityLoading?"Loading exam providers…":utilityError?"Service temporarily unavailable":"Choose exam body"}</option>{utilityProviders.map(p=><option key={p.id} value={p.id}>{p.name}</option>)}</select>
     </label>
     <label className="block text-sm font-bold">Quantity *<input type="number" min="1" max="10" step="1" value={form.quantity||"1"} onChange={e=>set("quantity",e.target.value)} required className="mt-2 w-full rounded-xl border border-slate-200 px-4 py-3"/></label>
-    {examPriceConfigured?<p className="text-sm text-slate-600">Price per PIN: ₦{examUnitPrice.toLocaleString()}. PINs are delivered after Pairgate completes processing.</p>:<p role="alert" className="rounded-lg bg-amber-50 p-3 text-sm text-amber-900">Choose WAEC, NECO or NABTEB to see the PIN price.</p>}
+    {utilityError||(!utilityLoading&&utilityProviders.length===0)?<p role="alert" className="rounded-lg bg-amber-50 p-3 text-sm text-amber-900">{SERVICE_UNAVAILABLE_MESSAGE}</p>:examPriceConfigured?<p className="text-sm text-slate-600">Price per PIN: ₦{examUnitPrice.toLocaleString()}. PINs are delivered after Pairgate completes processing.</p>:<p role="alert" className="rounded-lg bg-amber-50 p-3 text-sm text-amber-900">Choose WAEC, NECO or NABTEB to see the PIN price.</p>}
     {utilityError&&<p className="rounded-lg bg-amber-50 p-3 text-sm text-amber-900">{utilityError}</p>}
    </div>}
    {kind==="datapin"&&<div className="space-y-4 rounded-2xl border border-slate-200 p-4">
@@ -262,22 +267,22 @@ export default function RequestService(){
      <select value={form.network||"mtn"} onChange={e=>{set("network",e.target.value);set("denomination","");}} className="mt-2 w-full rounded-xl border border-slate-200 bg-white px-4 py-3"><option value="mtn">MTN</option><option value="airtel">Airtel</option><option value="glo">Glo</option><option value="9mobile">9mobile</option></select>
     </label>
     <label className="block text-sm font-bold">Recharge card PIN denomination *
-     <select value={form.denomination||""} onChange={e=>set("denomination",e.target.value)} required disabled={epinLoading||epinDenominations.length===0} className="mt-2 w-full rounded-xl border border-slate-200 bg-white px-4 py-3"><option value="">{epinLoading?"Loading denominations…":"Choose denomination"}</option>{epinDenominations.map(d=><option key={d.value} value={d.value}>{d.label}</option>)}</select>
+     <select value={form.denomination||""} onChange={e=>set("denomination",e.target.value)} required disabled={epinLoading||epinDenominations.length===0} className="mt-2 w-full rounded-xl border border-slate-200 bg-white px-4 py-3"><option value="">{epinLoading?"Loading denominations…":epinError?"Service temporarily unavailable":"Choose denomination"}</option>{epinDenominations.map(d=><option key={d.value} value={d.value}>{d.label}</option>)}</select>
     </label>
     <label className="block text-sm font-bold">Quantity *<input type="number" min="1" max="10" step="1" value={form.quantity||"1"} onChange={e=>set("quantity",e.target.value)} required className="mt-2 w-full rounded-xl border border-slate-200 px-4 py-3"/></label>
-    {epinError&&<p className="rounded-lg bg-amber-50 p-3 text-sm text-amber-900">{epinError}</p>}
+    {epinError&&<p role="alert" className="rounded-lg bg-amber-50 p-3 text-sm text-amber-900">{SERVICE_UNAVAILABLE_MESSAGE}</p>}
    </div>}
    {kind==="cable"&&<div className="space-y-4 rounded-2xl border border-slate-200 p-4">
     <label className="block text-sm font-bold">TV package *
      <select value={form.provider_plan_id||""} disabled={cableLoading||cablePlans.length===0} onChange={e=>{const plan=cablePlans.find(p=>p.id===e.target.value);set("provider_plan_id",plan?.id||"");set("provider_amount",plan?String(plan.price):"");set("plan_name",plan?.name||"");}} className="mt-2 w-full rounded-xl border border-slate-200 bg-white px-4 py-3">
-      <option value="">{cableLoading?"Loading packages…":cablePlans.length?"Choose a package":"No packages available"}</option>
+      <option value="">{cableLoading?"Loading packages…":cableError?"Service temporarily unavailable":cablePlans.length?"Choose a package":"No packages available"}</option>
       {cablePlans.map(plan=><option key={plan.id} value={plan.id}>{plan.name} — ₦{plan.price.toLocaleString()}</option>)}
      </select>
     </label>
     <label className="block text-sm font-bold">Smartcard / IUC number *
      <input value={form.smartcard||form.smartcard_number||form.iuc_number||""} onChange={e=>set("smartcard",e.target.value)} required inputMode="numeric" className="mt-2 w-full rounded-xl border border-slate-200 px-4 py-3" placeholder="Enter the number on your decoder"/>
     </label>
-    {cableError&&<p className="rounded-lg bg-amber-50 p-3 text-sm text-amber-900">{cableError}</p>}
+    {cableError&&<p role="alert" className="rounded-lg bg-amber-50 p-3 text-sm text-amber-900">{SERVICE_UNAVAILABLE_MESSAGE}</p>}
    </div>}
    {kind==="data"&&<div className="space-y-4 rounded-2xl border border-slate-200 p-4">
     <label className="block text-sm font-bold">Network *
@@ -287,12 +292,12 @@ export default function RequestService(){
     </label>
     <label className="block text-sm font-bold">Data plan *
      <select value={form.provider_plan_id||""} disabled={plansLoading||dataPlans.length===0} onChange={e=>{const plan=dataPlans.find(p=>p.id===e.target.value);set("provider_plan_id",plan?.id||"");set("provider_amount",plan?String(plan.price):"");set("plan_name",plan?.name||"");set("plan_validity",plan?.validity||"");}} className="mt-2 w-full rounded-xl border border-slate-200 bg-white px-4 py-3">
-      <option value="">{plansLoading?"Loading live plans…":dataPlans.length?"Choose a data plan":"No plans available"}</option>
+      <option value="">{plansLoading?"Loading live plans…":plansError?"Service temporarily unavailable":dataPlans.length?"Choose a data plan":"No plans available"}</option>
       {dataPlans.map(plan=><option key={plan.id} value={plan.id}>{plan.name}{plan.validity?" · "+plan.validity:""} — ₦{Number(plan.price).toLocaleString()}</option>)}
      </select>
     </label>
-    {plansError&&<p className="rounded-lg bg-amber-50 p-3 text-sm text-amber-900">Could not load live plans: {plansError}</p>}
-    {!plansLoading&&!plansError&&dataPlans.length===0&&<p className="text-sm text-slate-600">No plans were returned by Pairgate. The provider catalogue endpoint must be configured before data purchases can be enabled.</p>}
+    {plansError&&<p role="alert" className="rounded-lg bg-amber-50 p-3 text-sm text-amber-900">{SERVICE_UNAVAILABLE_MESSAGE}</p>}
+    {!plansLoading&&!plansError&&dataPlans.length===0&&<p role="alert" className="rounded-lg bg-amber-50 p-3 text-sm text-amber-900">{SERVICE_UNAVAILABLE_MESSAGE}</p>}
    </div>}
    {params.slug!=="jamb-services"&&fields.filter(f=>!(isVTU&&(isInternalProviderField(f)||["cable","electricity","exam","datapin"].includes(kind)||((kind==="data"||kind==="cable")&&f.field_key==="amount")||(kind==="data"&&f.field_key==="network")))).map(f=><label key={f.field_key} className="block text-sm font-bold">{f.label}{f.required&&<span className="text-red-500"> *</span>}{renderField(f)}</label>)}
    {isVTU&&providerAmount>0&&<div className="rounded-2xl bg-slate-50 p-4 text-sm"><div className="flex justify-between"><span>Provider amount</span><b>₦{providerAmount.toLocaleString()}</b></div><div className="mt-2 flex justify-between"><span>Service fee</span><b>₦{serviceFee.toLocaleString()}</b></div><div className="mt-3 flex justify-between border-t pt-3 text-base"><span className="font-black">Total to pay</span><b>₦{total.toLocaleString()}</b></div></div>}
