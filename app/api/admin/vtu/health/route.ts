@@ -17,12 +17,16 @@ export async function GET() {
 
     const baseUrl = (process.env.PAIRGATE_BASE_URL || 'https://pairgate.com/api/v1').replace(/\/+$/, '') + '/';
     const apiKey = (process.env.PAIRGATE_API_KEY || '').trim();
+    const testMode = (process.env.PAIRGATE_TEST_MODE || 'false').toLowerCase() === 'true';
+    const educationPath = testMode ? 'test/providers/education' : 'providers/education';
     const result: Record<string, unknown> = {
       ok: true,
       configured: Boolean(apiKey),
       provider: 'Pairgate',
       baseUrl,
       endpoint: baseUrl + 'wallet/balance',
+      testMode,
+      educationEndpoint: baseUrl + educationPath,
     };
     if (!apiKey) {
       return NextResponse.json({ ...result, providerReachable: false, providerError: 'Pairgate API key is missing. Set PAIRGATE_API_KEY in Vercel.' }, { status: 200 });
@@ -39,6 +43,37 @@ export async function GET() {
       result.providerReachable = !message.startsWith('PAIRGATE_HTTP_401') && !message.startsWith('PAIRGATE_HTTP_403');
       result.providerOk = false;
       result.providerError = message;
+    }
+
+    // Admin-only, read-only probe of the exact endpoint that feeds the Exam PIN selector.
+    // Preserve the upstream response body here for diagnosis; customer routes still
+    // receive only the friendly fallback from the normal Pairgate client.
+    try {
+      const probe = await fetch(baseUrl + educationPath, {
+        method: 'GET',
+        headers: {
+          Authorization: 'Bearer ' + apiKey,
+          Accept: 'application/json',
+          'Content-Type': 'application/json',
+          'Cache-Control': 'no-cache',
+        },
+        cache: 'no-store',
+        signal: AbortSignal.timeout(15000),
+      });
+      const responseBody = await probe.text();
+      const diagnosticLimit = 30000;
+      result.educationProbe = {
+        httpStatus: probe.status,
+        ok: probe.ok,
+        contentType: probe.headers.get('content-type') || '',
+        cloudflareRayId: probe.headers.get('cf-ray') || '',
+        body: responseBody.slice(0, diagnosticLimit),
+        bodyTruncated: responseBody.length > diagnosticLimit,
+      };
+    } catch (error) {
+      result.educationProbe = {
+        networkError: error instanceof Error ? error.message : String(error),
+      };
     }
     return NextResponse.json(result, { status: 200 });
   } catch (error) {
