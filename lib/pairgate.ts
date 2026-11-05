@@ -5,7 +5,6 @@ import { customerSafeError } from "@/lib/service-errors";
 
 const BASE_URL = (process.env.PAIRGATE_BASE_URL || "https://pairgate.com/api/v1").replace(/\/+$/, "");
 const API_KEY = (process.env.PAIRGATE_API_KEY || "").trim();
-const TEST_MODE = (process.env.PAIRGATE_TEST_MODE || "false").toLowerCase() === "true";
 
 function clean(value: unknown) { return String(value ?? "").trim(); }
 function isTestModePayload(payload: any): boolean {
@@ -23,20 +22,8 @@ export function pairgateConfigured() {
 export async function pairgateRequest(path: string, method: "GET" | "POST" = "GET", params?: Record<string, unknown>, useTestMode = TEST_MODE) {
   if (!API_KEY) throw new Error("Pairgate API key is missing. Set PAIRGATE_API_KEY in Vercel.");
   const cleanPath = path.replace(/^\/+/, "");
-  // Only endpoints documented by Pairgate as testable should be prefixed.
-  // Catalogues and wallet/provider discovery endpoints remain on their normal paths.
-  const testableEndpoints = new Set([
-    "airtime/purchase", "data/purchase", "cable/purchase", "electricity/purchase",
-    "education/purchase", "epin/purchase", "transaction/status",
-    "electricity/verify", "cable/verify",
-    // Pairgate documents /test/providers/{type} for provider discovery too.
-    "providers", "providers/data", "providers/airtime", "providers/tv",
-    "providers/electricity", "providers/education", "providers/bet"
-  ]);
-  const testPath = useTestMode && testableEndpoints.has(cleanPath) && !cleanPath.startsWith("test/")
-    ? "test/" + cleanPath
-    : cleanPath;
-  const url = new URL(testPath, BASE_URL + "/");
+  // Production only: never redirect provider or payment requests to test endpoints.
+  const url = new URL(cleanPath, BASE_URL + "/");
   const options: RequestInit = {
     method,
     headers: {
