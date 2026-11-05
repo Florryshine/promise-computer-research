@@ -328,7 +328,7 @@ async function updateFinalStatus(admin: any, order: any, transaction: any, statu
 async function markNeedsAttention(admin: any, order: any, message: string) {
   await admin.from("orders").update({
     status: "needs_information",
-    admin_note: "Payment received, but Pairgate fulfillment could not start: " + message,
+    admin_note: "Payment received, but this service is temporarily unavailable. Please try again later or contact support.",
   }).eq("id", order.id);
   return { status: "failed", message };
 }
@@ -440,7 +440,8 @@ async function checkPendingTransaction(admin: any, order: any, transaction: any)
     }
     return { status: effectiveStatus, result, message: effectiveStatus === "pending" || effectiveStatus === "processing" ? "Pairgate has not yet supplied the required delivery details. The existing transaction was checked, not resubmitted." : "Pairgate transaction status checked: " + effectiveStatus + "." };
   } catch (error) {
-    const reason = error instanceof Error ? error.message : "unknown error";
+    const rawReason = error instanceof Error ? error.message : "unknown error";
+    const reason = customerSafeError(error);
     const batchId = clean(first(transaction.response?.data, "batch_id"));
     // Make the situation actionable for staff instead of leaving the order silently stuck.
     if (String(order.status) !== "completed") {
@@ -582,12 +583,13 @@ export async function fulfillOrder(orderId: string) {
       : { provider_id: product.network, quantity: product.quantity, denomination: product.denomination, reference: rid };
     result = await pairgateRequest(endpoints[product.kind], "POST", requestBody);
   } catch (error) {
-    const message = error instanceof Error ? error.message : "Pairgate request failed.";
+    const rawMessage = error instanceof Error ? error.message : "Pairgate request failed.";
+    const message = customerSafeError(error);
     const ambiguous = message.startsWith("PAIRGATE_NETWORK_AMBIGUOUS") || /PAIRGATE_HTTP_5\d\d/.test(message);
     await admin.from("provider_transactions").update({
       status: ambiguous ? "pending" : "failed",
       provider_status: ambiguous ? "unknown — check Pairgate transaction history before retrying" : "error",
-      response: { error: message, ambiguous },
+      response: { error: rawMessage, ambiguous },
     }).eq("request_id", rid);
     await admin.from("orders").update({
       status: "needs_information",
