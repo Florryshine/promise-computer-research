@@ -331,7 +331,7 @@ async function markNeedsAttention(admin: any, order: any, message: string) {
     status: "needs_information",
     admin_note: "Payment received, but this service is temporarily unavailable. Please try again later or contact support.",
   }).eq("id", order.id);
-  return { status: "failed", message };
+  return { status: "failed", message: customerSafeError(message) };
 }
 
 // Pairgate's status endpoint is keyed by its own transaction reference. For some products (e.g. e-pins) the
@@ -585,7 +585,7 @@ export async function fulfillOrder(orderId: string) {
   } catch (error) {
     const rawMessage = error instanceof Error ? error.message : "Pairgate request failed.";
     const message = customerSafeError(error);
-    const ambiguous = message.startsWith("PAIRGATE_NETWORK_AMBIGUOUS") || /PAIRGATE_HTTP_5\d\d/.test(message);
+    const ambiguous = rawMessage.startsWith("PAIRGATE_NETWORK_AMBIGUOUS") || /PAIRGATE_HTTP_5\d\d/.test(rawMessage);
     await admin.from("provider_transactions").update({
       status: ambiguous ? "pending" : "failed",
       provider_status: ambiguous ? "unknown — check Pairgate transaction history before retrying" : "error",
