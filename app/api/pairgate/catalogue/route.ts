@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { pairgateRequest } from "@/lib/pairgate";
+import { SERVICE_UNAVAILABLE_MESSAGE } from "@/lib/service-errors";
 
 export const dynamic = "force-dynamic";
 const clean=(v:unknown)=>String(v??"").trim();
@@ -34,7 +35,7 @@ export async function GET(request:Request){
   }
   return NextResponse.json({error:"Unknown catalogue type."},{status:400});
  }catch(error){
-  const message=error instanceof Error?error.message:"Pairgate catalogue request failed.";
-  return NextResponse.json({error:message},{status:502});
+  console.error("Pairgate catalogue request failed:", error);
+  return NextResponse.json({error:SERVICE_UNAVAILABLE_MESSAGE},{status:503});
  }
 }
