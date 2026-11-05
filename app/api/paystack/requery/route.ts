@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
 import { createAdminClient } from '@/lib/supabase/admin';
 import { fulfillOrder } from '@/lib/pairgate';
+import { customerSafeError } from '@/lib/service-errors';
 
 function diagnose(result: any, expectedAmount: number, expectedCurrency: string) {
   const status = String(result?.data?.status || '').toLowerCase();
@@ -95,7 +96,7 @@ export async function POST(request: Request) {
         return NextResponse.json({ ok: true, code: 'already_paid_fulfillment_attempted', message: 'Payment is paid. Fulfillment status: ' + fulfillment.status + '.', cause: detail || undefined, fulfillment });
       } catch (error) {
         console.error('Provider fulfillment failed for already-paid order:', error);
-        return NextResponse.json({ ok: true, code: 'already_paid_fulfillment_failed', message: 'Payment is paid, but provider fulfillment failed.', cause: (error as any)?.message || (error as any)?.details || (error as any)?.hint || JSON.stringify(error) || 'Unknown fulfillment error' });
+        return NextResponse.json({ ok: true, code: 'already_paid_fulfillment_failed', message: 'Payment is paid, but provider fulfillment failed.', cause: customerSafeError(error, 'The service provider is temporarily unavailable. Please try again later.') });
       }
     }
 
@@ -130,6 +131,6 @@ export async function POST(request: Request) {
     return NextResponse.json({ ok: true, code: 'verified', message: 'Payment verified and order processing started.', diagnosis });
   } catch (error) {
     console.error('Paystack requery unexpected error:', error);
-    return NextResponse.json({ ok: false, code: 'unexpected_error', message: 'Could not re-query the payment right now.', cause: error instanceof Error ? error.message : 'Unknown error' }, { status: 500 });
+    return NextResponse.json({ ok: false, code: 'unexpected_error', message: 'Could not re-query the payment right now.', cause: customerSafeError(error, 'Could not re-query the payment right now.') }, { status: 500 });
   }
 }
