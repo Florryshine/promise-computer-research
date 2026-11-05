@@ -28,7 +28,10 @@ export async function pairgateRequest(path: string, method: "GET" | "POST" = "GE
   const testableEndpoints = new Set([
     "airtime/purchase", "data/purchase", "cable/purchase", "electricity/purchase",
     "education/purchase", "epin/purchase", "transaction/status",
-    "electricity/verify", "cable/verify"
+    "electricity/verify", "cable/verify",
+    // Pairgate documents /test/providers/{type} for provider discovery too.
+    "providers", "providers/data", "providers/airtime", "providers/tv",
+    "providers/electricity", "providers/education", "providers/bet"
   ]);
   const testPath = useTestMode && testableEndpoints.has(cleanPath) && !cleanPath.startsWith("test/")
     ? "test/" + cleanPath
