@@ -39,13 +39,25 @@ export default function PairgateHealth() {
         <div className="mt-5 rounded-2xl border border-slate-200 bg-slate-50 p-4 text-sm">
           <div className="flex flex-wrap gap-2 font-bold">
             <span className="rounded-full bg-white px-3 py-1">Configured: {result.configured ? 'Yes' : 'No'}</span>
+            <span className="rounded-full bg-white px-3 py-1">Pairgate mode: {result.testMode ? 'TEST' : 'LIVE'}</span>
             <span className="rounded-full bg-white px-3 py-1">Reachable: {reachable ? 'Yes' : 'No'}</span>
             {result.httpStatus != null && <span className="rounded-full bg-white px-3 py-1">HTTP {result.httpStatus}</span>}
             {result.providerOk != null && <span className="rounded-full bg-white px-3 py-1">Provider: {result.providerOk ? 'OK' : 'Rejected'}</span>}
           </div>
           <p className="mt-3 text-xs text-slate-500">Endpoint tested: {result.endpoint || '—'}</p>
           {result.providerError && <p className="mt-3 rounded-xl bg-white p-3 text-xs text-red-700">Provider connection failed. Check server logs for technical details.</p>}
-          {result.providerResponse !== undefined && <p className="mt-3 rounded-xl bg-white p-3 text-xs text-slate-700">Provider connection successful. Sensitive response details are hidden.</p>}
+          {result.providerResponse !== undefined && <p className="mt-3 rounded-xl bg-white p-3 text-xs text-slate-700">Wallet response received. Sensitive account details are hidden.</p>}
+          {result.educationProbe && (
+            <div className="mt-4">
+              <p className="font-bold text-slate-800">Exam PIN provider endpoint diagnostic</p>
+              <p className="mt-1 text-xs text-slate-500">
+                {result.educationEndpoint || '—'} · {result.educationProbe.httpStatus != null ? 'HTTP ' + result.educationProbe.httpStatus : 'No HTTP response'}
+                {result.educationProbe.contentType ? ' · ' + result.educationProbe.contentType : ''}
+                {result.educationProbe.cloudflareRayId ? ' · Cloudflare Ray ID: ' + result.educationProbe.cloudflareRayId : ''}
+              </p>
+              <pre className="mt-2 max-h-[32rem] overflow-auto whitespace-pre-wrap break-words rounded-xl bg-slate-950 p-3 text-[11px] leading-relaxed text-slate-100">{result.educationProbe.body || result.educationProbe.networkError || 'No response body.'}</pre>
+            </div>
+          )}
         </div>
       )}
 
