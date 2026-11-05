@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { pairgateRequest } from "@/lib/pairgate";
+import { SERVICE_UNAVAILABLE_MESSAGE } from "@/lib/service-errors";
 
 export async function POST(request:Request){
  try{
@@ -27,7 +28,7 @@ export async function POST(request:Request){
   if(data?.status===false)return NextResponse.json({ok:false,error:data.message||"Provider could not verify these details."},{status:422});
   return NextResponse.json({ok:Boolean(data?.status??true),customerName:String(data?.customer_name||""),message:String(data?.message||"Details verified.")});
  }catch(error){
-  const message=error instanceof Error?error.message:"Provider verification failed.";
-  return NextResponse.json({error:message},{status:502});
+  console.error("Pairgate customer verification failed:", error);
+  return NextResponse.json({error:SERVICE_UNAVAILABLE_MESSAGE},{status:503});
  }
 }
