@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { getPairgateDataPlans } from "@/lib/pairgate";
+import { SERVICE_UNAVAILABLE_MESSAGE } from "@/lib/service-errors";
 
 export const dynamic = "force-dynamic";
 
@@ -13,8 +14,7 @@ export async function GET(request: Request) {
       })),
     }, { headers: { "Cache-Control": "no-store" } });
   } catch (error) {
-    const message = error instanceof Error ? error.message : "Pairgate catalogue is unavailable.";
-    const status = message.includes("API key is missing") ? 503 : 502;
-    return NextResponse.json({ error: message, plans: [] }, { status });
+    console.error("Pairgate data-plan catalogue failed:", error);
+    return NextResponse.json({ error: SERVICE_UNAVAILABLE_MESSAGE, plans: [] }, { status: 503 });
   }
 }
