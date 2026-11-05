@@ -2,6 +2,7 @@ import {NextResponse} from "next/server";
 import {createClient} from "@/lib/supabase/server";
 import {createAdminClient} from "@/lib/supabase/admin";
 import {getPairgateDataPlans,pairgateRequest} from "@/lib/pairgate";
+import {customerSafeError} from "@/lib/service-errors";
 
 const VTU_SLUGS=new Set(["airtime-recharge","data-subscription","dstv-subscription","gotv-subscription","startimes-subscription","electricity-bill","exam-pins","data-pins"]);
 const clean=(v:unknown)=>String(v??"").trim();
@@ -164,7 +165,7 @@ export async function POST(request:Request){
 
   return NextResponse.json({id:order.id,amount:Number(order.amount),quoteRequired:requiresQuote});
  }catch(error){
-  const message=error instanceof Error?error.message:"Could not create the service request.";
-  return NextResponse.json({error:message},{status:500});
+  console.error("Create service order failed:", error);
+  return NextResponse.json({error:customerSafeError(error,"Could not create this request. Please try again.")},{status:500});
  }
 }
