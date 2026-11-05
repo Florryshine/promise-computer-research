@@ -440,7 +440,6 @@ async function checkPendingTransaction(admin: any, order: any, transaction: any)
     }
     return { status: effectiveStatus, result, message: effectiveStatus === "pending" || effectiveStatus === "processing" ? "Pairgate has not yet supplied the required delivery details. The existing transaction was checked, not resubmitted." : "Pairgate transaction status checked: " + effectiveStatus + "." };
   } catch (error) {
-    const rawReason = error instanceof Error ? error.message : "unknown error";
     const reason = customerSafeError(error);
     const batchId = clean(first(transaction.response?.data, "batch_id"));
     // Make the situation actionable for staff instead of leaving the order silently stuck.
