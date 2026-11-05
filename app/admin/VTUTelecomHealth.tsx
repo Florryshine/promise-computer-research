@@ -44,8 +44,8 @@ export default function PairgateHealth() {
             {result.providerOk != null && <span className="rounded-full bg-white px-3 py-1">Provider: {result.providerOk ? 'OK' : 'Rejected'}</span>}
           </div>
           <p className="mt-3 text-xs text-slate-500">Endpoint tested: {result.endpoint || '—'}</p>
-          {result.providerError && <pre className="mt-3 overflow-x-auto whitespace-pre-wrap rounded-xl bg-white p-3 text-xs text-red-700">{result.providerError}</pre>}
-          {result.providerResponse !== undefined && <pre className="mt-3 max-h-64 overflow-auto whitespace-pre-wrap rounded-xl bg-white p-3 text-xs text-slate-700">{JSON.stringify(result.providerResponse, null, 2)}</pre>}
+          {result.providerError && <p className="mt-3 rounded-xl bg-white p-3 text-xs text-red-700">Provider connection failed. Check server logs for technical details.</p>}
+          {result.providerResponse !== undefined && <p className="mt-3 rounded-xl bg-white p-3 text-xs text-slate-700">Provider connection successful. Sensitive response details are hidden.</p>}
         </div>
       )}
 
