@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { fulfillOrder } from "@/lib/pairgate";
+import { customerSafeError } from "@/lib/service-errors";
 
 export async function POST(_request: Request, { params }: { params: Promise<{ id: string }> }) {
   try {
@@ -42,7 +43,7 @@ export async function POST(_request: Request, { params }: { params: Promise<{ id
     console.error("Refresh Pairgate order status failed:", error);
     return NextResponse.json({
       ok: false,
-      message: error instanceof Error ? error.message : "Could not refresh provider status. Try again.",
+      message: customerSafeError(error, "Could not refresh the service status. Please try again later."),
     }, { status: 500 });
   }
 }
